@@ -13,7 +13,7 @@ signal.signal(signal.SIGINT,keyboardInterruptHandler)
 
 def talker(x,y,z):
     pub = rospy.Publisher('ADXL375/SafeEye', Imu, queue_size=10 )
-    rospy.init_node('ADXL375/SafeEye', anonymous=True)
+    rospy.init_node('ADXL375_SafeEye', anonymous=True)
     rate = rospy.Rate(50) #50hz
     data.linear_acceleration.x = x
     data.linear_acceleration.y = y
