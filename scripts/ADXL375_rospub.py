@@ -11,21 +11,50 @@ def keyboardInterruptHandler(signal,frame):
 
 signal.signal(signal.SIGINT,keyboardInterruptHandler)
 
-def talker(x,y,z):
-    pub = rospy.Publisher('ADXL375/SafeEye', Imu, queue_size=10 )
-    rospy.init_node('ADXL375_SafeEye', anonymous=True)
+def talker(x1,y1,z1,x2,y2,z2):
+    pub = rospy.Publisher('ADXL375/SafeEye', Imu, queue_size=10)
+    pub2= rospy.Publisher('ADXL375/Arm', Imu, queue_size=10)
+    rospy.init_node('ADXL375', anonymous=True)
     rate = rospy.Rate(50) #50hz
-    data.linear_acceleration.x = x
-    data.linear_acceleration.y = y
-    data.linear_acceleration.z = z
-    pub.publish(data)
+    data1.linear_acceleration.x = x1
+    data1.linear_acceleration.y = y1
+    data1.linear_acceleration.z = z1
+    pub.publish(data1)
+
+    data2.linear_acceleration.x = x2
+    data2.linear_acceleration.y = y2
+    data2.linear_acceleration.z = z2
+    pub2.publish(data2)
     rate.sleep()
+
+def Setup(ADXL375_DEVICE,OFSX,OFSY,OFSZ):
+    #Power on ADXL375
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,0)
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,16)
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,8)
+
+    #Set offset variables found through calibration script
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSX, OFSX)
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSY, OFSY)
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSZ, OFSZ)
+
+def ReadAxes(ADXL375_DEVICE):
+    block = bus.read_i2c_block_data(ADXL375_DEVICE,ADXL375_DATAX0,6)
+    x_raw = c_int8(block[0]).value | c_int8(block[1]).value << 8
+    x = x_raw/20.5
+    y_raw = c_int8(block[2]).value | c_int8(block[3]).value << 8
+    y = y_raw/20.5
+    z_raw = c_int8(block[4]).value | c_int8(block[5]).value << 8
+    z = z_raw/20.5
+    print(x,y,z)
+    return(x,y,z)
 
 #I2C channel
 i2c_ch = 0
 
 #Device address
-ADXL375_DEVICE = 0x53
+ADXL375_DEVICE1 = 0x53
+ADXL375_DEVICE2 = 0x1D
 
 #Register addresses
 ADXL375_POWER_CTL = 0x2D
@@ -37,27 +66,16 @@ ADXL375_OFSZ = 0x20
 #Initialize I2C (SMBus)
 bus = SMBus(i2c_ch)
 
-#Power on ADXL375
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,0)
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,16)
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,8)
 
-#Set offset variables found through calibration script
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSX, -1)
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSY, -1)
-bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSZ, 3)
+#Startup
+Setup(ADXL375_DEVICE1,-1,-1,3)
+Setup(ADXL375_DEVICE2,-1,-1,3)
 
-data = Imu()
+data1 = Imu()
+data2 = Imu()
 while True:
-    block = bus.read_i2c_block_data(ADXL375_DEVICE,ADXL375_DATAX0,6)
-    x_raw = c_int8(block[0]).value | c_int8(block[1]).value << 8
-    x = x_raw/20.5
-    y_raw = c_int8(block[2]).value | c_int8(block[3]).value << 8
-    y = y_raw/20.5
-    z_raw = c_int8(block[4]).value | c_int8(block[5]).value << 8
-    z = z_raw/20.5
-    print(x,y,z)
-    talker(x,y,z)
-
+    [x1,y1,z1] = ReadAxes(ADXL375_DEVICE1)
+    [x2,y2,z2] = ReadAxes(ADXL375_DEVICE2)
+    talker(x1,y1,z1,x2,y2,z2)
 
 
