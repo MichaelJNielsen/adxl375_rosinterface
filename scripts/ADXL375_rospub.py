@@ -6,7 +6,7 @@ from sensor_msgs.msg import Imu
 import signal, time, rospy
 
 def keyboardInterruptHandler(signal,frame):
-    print('Interrupted')
+    print('Interrupted!')
     exit(0)
 
 signal.signal(signal.SIGINT,keyboardInterruptHandler)
@@ -66,10 +66,9 @@ ADXL375_OFSZ = 0x20
 #Initialize I2C (SMBus)
 bus = SMBus(i2c_ch)
 
-
 #Startup
-Setup(ADXL375_DEVICE1,-1,-1,3)
-Setup(ADXL375_DEVICE2,-1,-1,3)
+Setup(ADXL375_DEVICE1,-1,1,2)
+Setup(ADXL375_DEVICE2,0,-2,-1)
 
 data1 = Imu()
 data2 = Imu()

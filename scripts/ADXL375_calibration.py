@@ -13,7 +13,14 @@ signal.signal(signal.SIGINT,keyboardInterruptHandler)
 i2c_ch = 0
 
 #Device address
-ADXL375_DEVICE = 0x53
+device = input('Which device do you wish to calibrate? (1 or 2?)')
+if device == '1':
+    ADXL375_DEVICE = 0x53
+elif device == '2':
+    ADXL375_DEVICE = 0x1D
+else:
+    print('device not available')
+    exit(0)
 
 #Register addresses
 ADXL375_POWER_CTL = 0x2D
