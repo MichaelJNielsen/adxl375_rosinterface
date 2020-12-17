@@ -12,8 +12,8 @@ def keyboardInterruptHandler(signal,frame):
 signal.signal(signal.SIGINT,keyboardInterruptHandler)
 
 def talker(x1,y1,z1,x2,y2,z2):
-    pub = rospy.Publisher('ADXL375/SafeEye', Imu, queue_size=10)
-    pub2= rospy.Publisher('ADXL375/Arm', Imu, queue_size=10)
+    pub = rospy.Publisher('ADXL375/Accel1', Imu, queue_size=10)
+    pub2= rospy.Publisher('ADXL375/Accel2', Imu, queue_size=10)
     rospy.init_node('ADXL375', anonymous=True)
     rate = rospy.Rate(50) #50hz
     data1.linear_acceleration.x = x1
