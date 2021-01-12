@@ -11,22 +11,6 @@ def keyboardInterruptHandler(signal,frame):
 
 signal.signal(signal.SIGINT,keyboardInterruptHandler)
 
-def talker(x1,y1,z1,x2,y2,z2):
-    pub = rospy.Publisher('ADXL375/Accel1', Imu, queue_size=10)
-    pub2= rospy.Publisher('ADXL375/Accel2', Imu, queue_size=10)
-    rospy.init_node('ADXL375', anonymous=True)
-    rate = rospy.Rate(50) #50hz
-    data1.linear_acceleration.x = x1
-    data1.linear_acceleration.y = y1
-    data1.linear_acceleration.z = z1
-    pub.publish(data1)
-
-    data2.linear_acceleration.x = x2
-    data2.linear_acceleration.y = y2
-    data2.linear_acceleration.z = z2
-    pub2.publish(data2)
-    rate.sleep()
-
 def Setup(ADXL375_DEVICE,OFSX,OFSY,OFSZ):
     #Power on ADXL375
     bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,0)
@@ -46,7 +30,7 @@ def ReadAxes(ADXL375_DEVICE):
     y = y_raw/20.5
     z_raw = c_int8(block[4]).value | c_int8(block[5]).value << 8
     z = z_raw/20.5
-    print(x,y,z)
+    #print(x,y,z)
     return(x,y,z)
 
 #I2C channel
@@ -70,11 +54,26 @@ bus = SMBus(i2c_ch)
 Setup(ADXL375_DEVICE1,-1,1,2)
 Setup(ADXL375_DEVICE2,0,-2,-1)
 
-data1 = Imu()
-data2 = Imu()
-while True:
-    [x1,y1,z1] = ReadAxes(ADXL375_DEVICE1)
-    [x2,y2,z2] = ReadAxes(ADXL375_DEVICE2)
-    talker(x1,y1,z1,x2,y2,z2)
+if __name__ == '__main__':
+    pub1 = rospy.Publisher('ADXL375/Accel1', Imu, queue_size=10)
+    pub2= rospy.Publisher('ADXL375/Accel2', Imu, queue_size=10)
+    rospy.init_node('ADXL375', anonymous=True)
+    rate = rospy.Rate(50) #50hz
+    data1 = Imu()
+    data2 = Imu()
 
+    while True:
+        [x1,y1,z1] = ReadAxes(ADXL375_DEVICE1)
+        [x2,y2,z2] = ReadAxes(ADXL375_DEVICE2)
 
+        data1.linear_acceleration.x = x1
+        data1.linear_acceleration.y = y1
+        data1.linear_acceleration.z = z1
+
+        data2.linear_acceleration.x = x2
+        data2.linear_acceleration.y = y2
+        data2.linear_acceleration.z = z2
+
+        pub1.publish(data1)
+        pub2.publish(data2)
+        rate.sleep()
