@@ -13,9 +13,11 @@ signal.signal(signal.SIGINT,keyboardInterruptHandler)
 
 def Setup(ADXL375_DEVICE,OFSX,OFSY,OFSZ):
     #Power on ADXL375
-    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,0)
-    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,16)
-    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,8)
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,0) #Standby during setup
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_BW_RATE, 9) #50Hz
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_FIFO_CTL, 0) #Bypass
+    bus.write_byte_data(ADXL375_DEVICE, ADXL375_POWER_CTL,8) #Setup finished - enter measuring mode
+    
 
     #Set offset variables found through calibration script
     bus.write_byte_data(ADXL375_DEVICE, ADXL375_OFSX, OFSX)
@@ -42,6 +44,8 @@ ADXL375_DEVICE2 = 0x1D
 
 #Register addresses
 ADXL375_POWER_CTL = 0x2D
+ADXL375_BW_RATE = 0x2C
+ADXL375_FIFO_CTL = 0x38
 ADXL375_DATAX0 = 0x32
 ADXL375_OFSX = 0x1E
 ADXL375_OFSY = 0x1F
@@ -51,7 +55,7 @@ ADXL375_OFSZ = 0x20
 bus = SMBus(i2c_ch)
 
 #Startup
-Setup(ADXL375_DEVICE1,-1,1,2)
+Setup(ADXL375_DEVICE1,-1,2,1)
 Setup(ADXL375_DEVICE2,0,-2,-1)
 
 if __name__ == '__main__':
