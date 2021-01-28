@@ -4,6 +4,7 @@
 #include <linux/i2c-dev.h>		//Needed for I2C port
 #include <stdio.h>
 #include <stdlib.h>
+#include <iostream>
 
 //Device address
 const int ADXL375_DEVICE1 = 0x53;
@@ -48,18 +49,30 @@ return;
 
 void setup(int OFSX, int OFSY, int OFSZ)
 {   
+    printf("enter setup");
     unsigned char buffer[60] = {0};
+    std::cout << "POWER_CTL - writing: " << &ADXL375_POWER_CTL;
     write(file_i2c, &ADXL375_POWER_CTL, 1);
     buffer[0] = 0;
+    std::cout << "POWER_CTL - writing: " << buffer;
     write(file_i2c, buffer, 1);
+    
+    std::cout << "BW_RATE - writing: " << &ADXL375_BW_RATE;
     write(file_i2c, &ADXL375_BW_RATE, 1);
     buffer[0] = 9;
+    std::cout << "BW_RATE - writing: " << buffer;
     write(file_i2c, buffer, 1);
+    
+    std::cout << "FIFO_CTL - writing: " << &ADXL375_FIFO_CTL;
     write(file_i2c, &ADXL375_FIFO_CTL, 1);
     buffer[0] = 0;
+    std::cout << "FIFO_CTL - writing: " << buffer;
     write(file_i2c, buffer, 1);
+    
+    std::cout << "POWER_CTL - writing: " << &ADXL375_POWER_CTL;
     write(file_i2c, &ADXL375_POWER_CTL, 1);
     buffer[0] = 8;
+    std::cout << "POWER_CTL - writing: " << buffer;
     write(file_i2c, buffer, 1);
     
     //Offset x,y,z
