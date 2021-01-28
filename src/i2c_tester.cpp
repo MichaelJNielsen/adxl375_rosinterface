@@ -46,10 +46,33 @@ void connect_device(int addr)
 return;
 }
 
-void setup(int addr, int OFSX, int OFSY, int OFSZ)
+void setup(int OFSX, int OFSY, int OFSZ)
+{   
+    unsigned char buffer[60] = {0};
+    write(file_i2c, &ADXL375_POWER_CTL, 1);
+    buffer[0] = 0;
+    write(file_i2c, buffer, 1);
+    write(file_i2c, &ADXL375_BW_RATE, 1);
+    buffer[0] = 9;
+    write(file_i2c, buffer, 1);
+    write(file_i2c, &ADXL375_FIFO_CTL, 1);
+    buffer[0] = 0;
+    write(file_i2c, buffer, 1);
+    write(file_i2c, &ADXL375_POWER_CTL, 1);
+    buffer[0] = 8;
+    write(file_i2c, buffer, 1);
+    
+    //Offset x,y,z
+return;
+}
+
+void read_axes()
 {
-    write(file_i2c, &ADXL375_POWER_CTL, 2);
-    write(file_i2c, 0, 2);
+    unsigned char buffer[60] = {0};
+    int length = 6;
+    write(file_i2c, &ADXL375_DATAX0, 1);
+    read(file_i2c, buffer, length);
+    printf("Data read: %s\n", buffer);
 return;
 }
 
@@ -57,7 +80,12 @@ int main()
 {
     open_bus();                      //Open I²C bus.
     connect_device(ADXL375_DEVICE1); //Establish connection to device.
-    setup(ADXL375_DEVICE1,0,0,0);    //Start the accelerometer and set offsets.
+    setup(0,0,0);    //Start the accelerometer and set offsets.
+    while (true)
+    {
+        read_axes();
+        usleep(1000000);
+    }
 return 0;
 }
 
