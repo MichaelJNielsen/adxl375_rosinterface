@@ -171,6 +171,7 @@ include_directories(
 # )
 
 catkin_install_python(PROGRAMS
+scripts/talker.py
 scripts/ADXL375_rospub.py
 DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
@@ -209,3 +210,10 @@ DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+
+add_executable(adxl375_rospub src/adxl375_rospub.cpp)
+target_link_libraries(adxl375_rospub ${catkin_LIBRARIES})
+add_dependencies(adxl375_rospub adxl375_rosinterface_generate_messages_cpp)
+
+
