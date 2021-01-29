@@ -118,6 +118,19 @@ return;
 
 void read_axes()
 {
+    unsigned char outbuffer[1] = {0};
+    //Contact output registers:
+    outbuffer[0] = ADXL375_DATAX0;
+    w = write(file_i2c, outbuffer, sizeof(outbuffer));
+    if (w!=sizeof(outbuffer)) {
+        std::cout << "Could not write full array" << std::endl;
+        exit(0);
+    }
+    if (w<0) {
+        std::cout << "Write error" << std::endl;
+        exit(0);
+    }
+    //Read what it sends
     ssize_t const r { read(file_i2c, a, sizeof(a))};
     if (r!=sizeof(a)) {
         std::cout << "Could not read full array" << std::endl;
@@ -142,8 +155,9 @@ int main()
     {
         read_axes();
         usleep(1000000);
+        printf("read: ");
         for(unsigned int i(0); i<sizeof(a); ++i) {
-        printf("read: %d ", a[i]);
+        printf("%d ", a[i]);
         }
         printf("\n");
     }
