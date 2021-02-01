@@ -20,8 +20,7 @@ const int ADXL375_OFSY = 0x1F;
 const int ADXL375_OFSZ = 0x20;
 
 int file_i2c;
-unsigned char a[10] = {0};
-
+unsigned char a[6] = {0};
 
 void open_bus()
 {
@@ -32,8 +31,8 @@ void open_bus()
         printf("Failed to open the specified i2c bus");
         exit(0);
     }
-    usleep(200000);
-return; 
+    usleep(20000);
+return;
 }
 
 void connect_device(int addr)
@@ -46,15 +45,15 @@ void connect_device(int addr)
     }
     else
         printf("Connected to device");
-    usleep(200000);
+    usleep(20000);
 return;
 }
 
 void setup(int OFSX, int OFSY, int OFSZ)
-{   
+{
     printf("enter setup \n");
     unsigned char outbuffer[1] = {0};
-    
+
     //Contact power control register:
     outbuffer[0] = ADXL375_POWER_CTL;
     ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
@@ -66,8 +65,8 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
-    usleep(200000);
-    
+    usleep(20000);
+
     //Set into standby mode:
     outbuffer[0] = 0b00000000;
     w = write(file_i2c, outbuffer, sizeof(outbuffer));
@@ -79,8 +78,8 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
-    usleep(200000);
-    
+    usleep(20000);
+
     //Set into measure mode:
     outbuffer[0] = 0b00001000;
     w = write(file_i2c, outbuffer, sizeof(outbuffer));
@@ -92,31 +91,31 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
-    usleep(200000);
+    usleep(20000);
 
     //write(file_i2c, &ADXL375_POWER_CTL, 1);
     //buffer[0] = 0;
     //std::cout << "POWER_CTL - writing: " << buffer;
     //write(file_i2c, buffer, 1);
-    
+
     //std::cout << "BW_RATE - writing: " << &ADXL375_BW_RATE;
     //write(file_i2c, &ADXL375_BW_RATE, 1);
     //buffer[0] = 9;
     //std::cout << "BW_RATE - writing: " << buffer;
     //write(file_i2c, buffer, 1);
-    
+
     //std::cout << "FIFO_CTL - writing: " << &ADXL375_FIFO_CTL;
     //write(file_i2c, &ADXL375_FIFO_CTL, 1);
     //buffer[0] = 0;
     //std::cout << "FIFO_CTL - writing: " << buffer;
     //write(file_i2c, buffer, 1);
-    
+
     //std::cout << "POWER_CTL - writing: " << &ADXL375_POWER_CTL;
     //write(file_i2c, &ADXL375_POWER_CTL, 1);
     //buffer[0] = 8;
     //std::cout << "POWER_CTL - writing: " << buffer;
     //write(file_i2c, buffer, 1);
-    
+
     //Offset x,y,z
 return;
 }
@@ -135,8 +134,7 @@ void read_axes()
         std::cout << "Write error" << std::endl;
         exit(0);
     }
-    usleep(200000);
-    
+
     //Read what it sends
     ssize_t const r { read(file_i2c, a, sizeof(a))};
     if (r!=sizeof(a)) {
@@ -155,63 +153,30 @@ return;
 int main()
 {
     open_bus();                      //Open I²C bus.
-
     connect_device(ADXL375_DEVICE1); //Establish connection to device.
     setup(0,0,0);    //Start the accelerometer and set offsets.
-    
+
     while (true)
     {
         read_axes();
-        usleep(800000);
         printf("read: ");
         for(unsigned int i(0); i<sizeof(a); ++i) {
-        printf("%d ", a[i]);
+            //printf("%02x", unsigned int(a[i]));
+	    printf("%d",a[i]);
+	    printf(" ");
         }
-        printf("\n");
+	usleep(200000);
+	printf("\n");
+	int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
+	float x = x_raw/20.5;
+	int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
+	float y = y_raw/20.5;
+	int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
+	float z = z_raw/20.5;
+	printf("x = %f ", x);
+	printf("y = %f ", y);
+	printf("z = %f ", z);
+	printf("\n");
     }
 return 0;
 }
-
-
-
-
-
-
-
-
-
-//int main() {
-//    int file_i2c;
-//    int length;
-//    unsigned char buffer[60] = {0};
-
-//    while (true)
-  //  {
-    //    read(file_i2c, buffer, 4);
-    //    printf("Data read: %s\n", buffer);
-//	usleep(1000000);
- //   }
-    //----- READ BYTES -----
-    //length = 16;			//<<< Number of bytes to read
-    //if (read(file_i2c, buffer, length) != length)		//read() returns the number of bytes actually read, if it doesn't match then an error occurred (e.g. no response from the device)
-    //{
-	    //ERROR HANDLING: i2c transaction failed
-	//    printf("Failed to read from the i2c bus.\n");
-    //}
-    //else
-    //{
-	//    printf("Data read: %s\n", buffer);
-    //}
-
-
-    //----- WRITE BYTES -----
-    //buffer[0] = 0x01;
-    //buffer[1] = 0x02;
-    //length = 2;			//<<< Number of bytes to write
-    //if (write(file_i2c, buffer, length) != length)		//write() returns the number of bytes actually written, if it doesn't match then an error occurred (e.g. no response from the device)
-    //{
-	    /* ERROR HANDLING: i2c transaction failed */
-//	    printf("Failed to write to the i2c bus.\n");
-  //  }
-//return 0;
-//}

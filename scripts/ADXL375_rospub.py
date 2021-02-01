@@ -32,7 +32,7 @@ def ReadAxes(ADXL375_DEVICE):
     y = y_raw/20.5
     z_raw = c_int8(block[4]).value | c_int8(block[5]).value << 8
     z = z_raw/20.5
-    #print(x,y,z)
+    print(x_raw)
     return(x,y,z)
 
 #I2C channel
@@ -56,7 +56,7 @@ bus = SMBus(i2c_ch)
 
 #Startup
 Setup(ADXL375_DEVICE1,-1,2,1)
-Setup(ADXL375_DEVICE2,0,-2,-1)
+#Setup(ADXL375_DEVICE2,0,-2,-1)
 
 if __name__ == '__main__':
     pub1 = rospy.Publisher('ADXL375/Accel1', Imu, queue_size=10)
@@ -68,7 +68,8 @@ if __name__ == '__main__':
 
     while True:
         [x1,y1,z1] = ReadAxes(ADXL375_DEVICE1)
-        [x2,y2,z2] = ReadAxes(ADXL375_DEVICE2)
+        #[x2,y2,z2] = ReadAxes(ADXL375_DEVICE2)
+        [x2,y2,z2] = [1,2,3]
 
         data1.linear_acceleration.x = x1
         data1.linear_acceleration.y = y1
