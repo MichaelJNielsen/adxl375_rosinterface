@@ -32,6 +32,7 @@ void open_bus()
         printf("Failed to open the specified i2c bus");
         exit(0);
     }
+    usleep(200000);
 return; 
 }
 
@@ -45,6 +46,7 @@ void connect_device(int addr)
     }
     else
         printf("Connected to device");
+    usleep(200000);
 return;
 }
 
@@ -64,6 +66,7 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
+    usleep(200000);
     
     //Set into standby mode:
     outbuffer[0] = 0b00000000;
@@ -76,6 +79,7 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
+    usleep(200000);
     
     //Set into measure mode:
     outbuffer[0] = 0b00001000;
@@ -88,6 +92,7 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
+    usleep(200000);
 
     //write(file_i2c, &ADXL375_POWER_CTL, 1);
     //buffer[0] = 0;
@@ -121,7 +126,7 @@ void read_axes()
     unsigned char outbuffer[1] = {0};
     //Contact output registers:
     outbuffer[0] = ADXL375_DATAX0;
-    w = write(file_i2c, outbuffer, sizeof(outbuffer));
+    ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
     if (w!=sizeof(outbuffer)) {
         std::cout << "Could not write full array" << std::endl;
         exit(0);
@@ -130,6 +135,8 @@ void read_axes()
         std::cout << "Write error" << std::endl;
         exit(0);
     }
+    usleep(200000);
+    
     //Read what it sends
     ssize_t const r { read(file_i2c, a, sizeof(a))};
     if (r!=sizeof(a)) {
@@ -148,13 +155,14 @@ return;
 int main()
 {
     open_bus();                      //Open I²C bus.
+
     connect_device(ADXL375_DEVICE1); //Establish connection to device.
     setup(0,0,0);    //Start the accelerometer and set offsets.
     
     while (true)
     {
         read_axes();
-        usleep(1000000);
+        usleep(800000);
         printf("read: ");
         for(unsigned int i(0); i<sizeof(a); ++i) {
         printf("%d ", a[i]);
