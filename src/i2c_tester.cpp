@@ -49,6 +49,21 @@ void connect_device(int addr)
 return;
 }
 
+void i2c_write(unsigned char bytes) {
+    unsigned char outbuffer[1] = {0};
+    outbuffer[0] = bytes;    
+    ssize_t w { write(file_i2c, buf, sizeof(outbuffer))};
+    if (w!=sizeof(outbuffer)) {
+        std::cout << "Could not write full array" << std::endl;
+        exit(0);
+    }
+    if (w<0) {
+        std::cout << "Write error" << std::endl;
+        exit(0);
+    }
+return;    
+}
+
 void setup(int OFSX, int OFSY, int OFSZ)
 {
     printf("enter setup \n");
