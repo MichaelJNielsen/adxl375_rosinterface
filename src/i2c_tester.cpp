@@ -11,7 +11,7 @@ const int ADXL375_DEVICE1 = 0x53;
 const int ADXL375_DEVICE2 = 0x1D;
 
 //Register addresses
-char ADXL375_POWER_CTL = 0x2D;
+unsigned char ADXL375_POWER_CTL = 0x2D;
 const int ADXL375_BW_RATE = 0x2C;
 const int ADXL375_FIFO_CTL = 0x38;
 const int ADXL375_DATAX0 = 0x32;
@@ -22,8 +22,7 @@ const int ADXL375_OFSZ = 0x20;
 int file_i2c;
 unsigned char a[6] = {0};
 
-void open_bus()
-{
+void open_bus() {
     char *filename = (char*)"/dev/i2c-0"; //Define which i2c port we use. To see which one the device is connected to use "sudo i2cdetect -y 0" or 1
     file_i2c = open(filename, O_RDWR); //Open the i2c bus as both read and write.
     if (file_i2c < 0)
@@ -35,8 +34,7 @@ void open_bus()
 return;
 }
 
-void connect_device(int addr)
-{
+void connect_device(int addr) {
     if (ioctl(file_i2c, I2C_SLAVE, addr) < 0)
     {
 	    printf("Failed to acquire bus access and/or talk to slave.\n");
@@ -51,26 +49,7 @@ return;
 
 void i2c_write(unsigned char bytes) {
     unsigned char outbuffer[1] = {0};
-    outbuffer[0] = bytes;    
-    ssize_t w { write(file_i2c, buf, sizeof(outbuffer))};
-    if (w!=sizeof(outbuffer)) {
-        std::cout << "Could not write full array" << std::endl;
-        exit(0);
-    }
-    if (w<0) {
-        std::cout << "Write error" << std::endl;
-        exit(0);
-    }
-return;    
-}
-
-void setup(int OFSX, int OFSY, int OFSZ)
-{
-    printf("enter setup \n");
-    unsigned char outbuffer[1] = {0};
-
-    //Contact power control register:
-    outbuffer[0] = ADXL375_POWER_CTL;
+    outbuffer[0] = bytes;
     ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
     if (w!=sizeof(outbuffer)) {
         std::cout << "Could not write full array" << std::endl;
@@ -80,11 +59,33 @@ void setup(int OFSX, int OFSY, int OFSZ)
         std::cout << "Write error" << std::endl;
         exit(0);
     }
+return;
+}
+
+void setup(int OFSX, int OFSY, int OFSZ)
+{
+    printf("enter setup \n");
+    unsigned char outbuffer[1] = {0};
+
+    //Contact power control register:
+
+    //i2c_write(ADXL375_POWER_CTL);
+
+    //outbuffer[0] = ADXL375_POWER_CTL;
+    //ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
+    //if (w!=sizeof(outbuffer)) {
+    //    std::cout << "Could not write full array" << std::endl;
+    //    exit(0);
+    //}
+    //if (w<0) {
+    //    std::cout << "Write error" << std::endl;
+    //    exit(0);
+    //}
     usleep(20000);
 
     //Set into standby mode:
     outbuffer[0] = 0b00000000;
-    w = write(file_i2c, outbuffer, sizeof(outbuffer));
+    ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
     if (w!=sizeof(outbuffer)) {
         std::cout << "Could not write full array" << std::endl;
         exit(0);
