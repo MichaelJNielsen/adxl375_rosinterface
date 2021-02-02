@@ -32,7 +32,7 @@ def ReadAxes(ADXL375_DEVICE):
     y = y_raw/20.5
     z_raw = c_int8(block[4]).value | c_int8(block[5]).value << 8
     z = z_raw/20.5
-    print(x_raw)
+    #print(x_raw)
     return(x,y,z)
 
 #I2C channel
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     pub1 = rospy.Publisher('ADXL375/Accel1', Imu, queue_size=10)
     pub2= rospy.Publisher('ADXL375/Accel2', Imu, queue_size=10)
     rospy.init_node('ADXL375', anonymous=True)
-    rate = rospy.Rate(50) #50hz
+    rate = rospy.Rate(2000) #50hz
     data1 = Imu()
     data2 = Imu()
 

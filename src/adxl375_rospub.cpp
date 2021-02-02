@@ -101,12 +101,13 @@ void setup(int OFSX, int OFSY, int OFSZ)
     i2c_write(ADXL375_POWER_CTL, 0b00000000);
     usleep(20000);
 
-    //Set bandwidth and output data rate
-    i2c_write(ADXL375_BW_RATE,0b00001011);
+    //Set bandwidth and output data rate 400Hz
+    i2c_write(ADXL375_BW_RATE,0b00001100);
     usleep(2000);
 
-    //Set FIFO to BypasS
+    //Set FIFO to Bypass
     i2c_write(ADXL375_FIFO_CTL, 0b00000000);
+    usleep(2000);
 
     //Set into measure mode
     i2c_write(ADXL375_POWER_CTL, 0b00001000);
@@ -125,31 +126,27 @@ return;
 
 int main(int argc, char **argv)
 {
-  float tmp_x, tmp_y, tmp_z;
   ros::init(argc, argv, "adxl_cppinterface");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<sensor_msgs::Imu>("ADXL375/Accel1", 1000);
-  ros::Rate loop_rate(2000);
+  ros::Publisher chatter_pub = n.advertise<sensor_msgs::Imu>("ADXL375/Accel1", 3);
+  ros::Rate loop_rate(400);
   
   open_bus();                       //Open I²C bus
   connect_device(ADXL375_DEVICE1);  //Establish connection to device
   setup(-1,0,-1);                   //Start the accelerometer and set offsets
   
   sensor_msgs::Imu data1;
-  //data1.linear_acceleration.x;
 
   while (ros::ok())
   {
     read_axes(&data1.linear_acceleration.x, &data1.linear_acceleration.y, &data1.linear_acceleration.z);
     
-    ROS_INFO("x: %f, y: %f, z: %f", data1.linear_acceleration.x, data1.linear_acceleration.y, data1.linear_acceleration.z);
+    //ROS_INFO("x: %f, y: %f, z: %f", data1.linear_acceleration.x, data1.linear_acceleration.y, data1.linear_acceleration.z);
     chatter_pub.publish(data1);
 
     ros::spinOnce();
 
     loop_rate.sleep();
   }
-
-
   return 0;
 }

@@ -5,16 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <chrono>
 
 //Device address
 const int ADXL375_DEVICE1 = 0x53; //1010011
 const int ADXL375_DEVICE2 = 0x1D; //11101
-
-//Read and write addresses
-unsigned char DEVICE1_WRITE = 0xA6; //10100110
-unsigned char DEVICE1_READ = 0xA7; //10100111
-unsigned char DEVICE2_WRITE = 0x3A; //111010
-unsigned char DEVICE2_READ = 0x3B;  //111011
 
 //Register addresses
 unsigned char ADXL375_POWER_CTL = 0x2D; //101101
@@ -72,9 +67,9 @@ return;
 
 void read_axes()
 {
-    //Contact data register
+    //Contact data register to ready the system for reading
     i2c_write(ADXL375_DATAX0,0b00000000);
-
+    
     //Read what it sends
     ssize_t const r { read(file_i2c, a, sizeof(a))};
     if (r!=sizeof(a)) {
@@ -96,11 +91,11 @@ void setup(int OFSX, int OFSY, int OFSZ)
     i2c_write(ADXL375_POWER_CTL, 0b00000000);
     usleep(20000);
 
-    //Set bandwidth and output data rate 50Hz
-    i2c_write(ADXL375_BW_RATE,0b00001001);
+    //Set bandwidth and output data rate
+    i2c_write(ADXL375_BW_RATE,0b00001100);
     usleep(2000);
 
-    //Set FIFO to BypasS
+    //Set FIFO to Bypass
     i2c_write(ADXL375_FIFO_CTL, 0b00000000);
 
     //Set into measure mode
@@ -115,6 +110,10 @@ void setup(int OFSX, int OFSY, int OFSZ)
     i2c_write(ADXL375_OFSZ, OFSZ);
     usleep(20000);
 
+    //Contact data register to ready the system for reading
+    //i2c_write(ADXL375_DATAX0,0b00000000);
+    //usleep(20000);
+
 return;
 }
 
@@ -122,19 +121,17 @@ int main()
 {
     open_bus();                      //Open I²C bus.
     connect_device(ADXL375_DEVICE1); //Establish connection to device.
-    setup(-1,0,-1);    //Start the accelerometer and set offsets.
+    setup(-1,0,1);    		     //Start the accelerometer and set offsets.
 
     while (true)
     {
+	auto start = std::chrono::steady_clock::now();
         read_axes();
-        printf("read: ");
-        for(unsigned int i(0); i<sizeof(a); ++i) {
-            //printf("%02x", unsigned int(a[i]));
-	    printf("%d",a[i]);
-	    printf(" ");
-        }
-	usleep(100000);
-	printf("\n");
+
+	//usleep(18100); //50Hz
+	usleep(1100); //400Hz
+	
+	
 	int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 	float x = x_raw/20.5;
 	int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
@@ -143,8 +140,12 @@ int main()
 	float z = z_raw/20.5;
 	printf("x = %f ", x);
 	printf("y = %f ", y);
-	printf("z = %f ", z);
-	printf("\n");
+	printf("z = %f \n", z);
+
+	auto end = std::chrono::steady_clock::now();
+	float elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+	float rate = 1000000000.0/elapsed;
+	printf("rate: %f \n", rate);
     }
 return 0;
 }
