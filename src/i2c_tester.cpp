@@ -7,17 +7,23 @@
 #include <iostream>
 
 //Device address
-const int ADXL375_DEVICE1 = 0x53;
-const int ADXL375_DEVICE2 = 0x1D;
+const int ADXL375_DEVICE1 = 0x53; //1010011
+const int ADXL375_DEVICE2 = 0x1D; //11101
+
+//Read and write addresses
+unsigned char DEVICE1_WRITE = 0xA6; //10100110
+unsigned char DEVICE1_READ = 0xA7; //10100111
+unsigned char DEVICE2_WRITE = 0x3A; //111010
+unsigned char DEVICE2_READ = 0x3B;  //111011
 
 //Register addresses
-unsigned char ADXL375_POWER_CTL = 0x2D;
-const int ADXL375_BW_RATE = 0x2C;
-const int ADXL375_FIFO_CTL = 0x38;
-const int ADXL375_DATAX0 = 0x32;
-const int ADXL375_OFSX = 0x1E;
-const int ADXL375_OFSY = 0x1F;
-const int ADXL375_OFSZ = 0x20;
+unsigned char ADXL375_POWER_CTL = 0x2D; //101101
+const int ADXL375_BW_RATE = 0x2C;       //101100
+const int ADXL375_FIFO_CTL = 0x38;      //111000
+const int ADXL375_DATAX0 = 0x32;        //110010
+const int ADXL375_OFSX = 0x1E;          //11110
+const int ADXL375_OFSY = 0x1F;          //11111
+const int ADXL375_OFSZ = 0x20;          //100000
 
 int file_i2c;
 unsigned char a[6] = {0};
@@ -47,10 +53,12 @@ void connect_device(int addr) {
 return;
 }
 
-void i2c_write(unsigned char bytes) {
-    unsigned char outbuffer[1] = {0};
-    outbuffer[0] = bytes;
+void i2c_write(unsigned char bytes0, unsigned char bytes1) {
+    unsigned char outbuffer[2] = {0};
+    outbuffer[0] = bytes0;
+    outbuffer[1] = bytes1;
     ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
+    w = write(file_i2c, outbuffer, sizeof(outbuffer));
     if (w!=sizeof(outbuffer)) {
         std::cout << "Could not write full array" << std::endl;
         exit(0);
@@ -64,92 +72,36 @@ return;
 
 void setup(int OFSX, int OFSY, int OFSZ)
 {
-    printf("enter setup \n");
-    unsigned char outbuffer[1] = {0};
-
-    //Contact power control register:
-
-    //i2c_write(ADXL375_POWER_CTL);
-
-    //outbuffer[0] = ADXL375_POWER_CTL;
-    //ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
-    //if (w!=sizeof(outbuffer)) {
-    //    std::cout << "Could not write full array" << std::endl;
-    //    exit(0);
-    //}
-    //if (w<0) {
-    //    std::cout << "Write error" << std::endl;
-    //    exit(0);
-    //}
+    //Set into standby mode
+    i2c_write(ADXL375_POWER_CTL, 0b00000000);
     usleep(20000);
 
-    //Set into standby mode:
-    outbuffer[0] = 0b00000000;
-    ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
-    if (w!=sizeof(outbuffer)) {
-        std::cout << "Could not write full array" << std::endl;
-        exit(0);
-    }
-    if (w<0) {
-        std::cout << "Write error" << std::endl;
-        exit(0);
-    }
+    //Set bandwidth and output data rate 50Hz
+    i2c_write(ADXL375_BW_RATE,0b00001001);
+    usleep(2000);
+
+    //Set FIFO to BypasS
+    i2c_write(ADXL375_FIFO_CTL, 0b00000000);
+
+    //Set into measure mode
+    i2c_write(ADXL375_POWER_CTL, 0b00001000);
     usleep(20000);
 
-    //Set into measure mode:
-    outbuffer[0] = 0b00001000;
-    w = write(file_i2c, outbuffer, sizeof(outbuffer));
-    if (w!=sizeof(outbuffer)) {
-        std::cout << "Could not write full array" << std::endl;
-        exit(0);
-    }
-    if (w<0) {
-        std::cout << "Write error" << std::endl;
-        exit(0);
-    }
+    //Set Offset calibrations
+    i2c_write(ADXL375_OFSX, OFSX);
+    usleep(20000);
+    i2c_write(ADXL375_OFSY, OFSY);
+    usleep(20000);
+    i2c_write(ADXL375_OFSZ, OFSZ);
     usleep(20000);
 
-    //write(file_i2c, &ADXL375_POWER_CTL, 1);
-    //buffer[0] = 0;
-    //std::cout << "POWER_CTL - writing: " << buffer;
-    //write(file_i2c, buffer, 1);
-
-    //std::cout << "BW_RATE - writing: " << &ADXL375_BW_RATE;
-    //write(file_i2c, &ADXL375_BW_RATE, 1);
-    //buffer[0] = 9;
-    //std::cout << "BW_RATE - writing: " << buffer;
-    //write(file_i2c, buffer, 1);
-
-    //std::cout << "FIFO_CTL - writing: " << &ADXL375_FIFO_CTL;
-    //write(file_i2c, &ADXL375_FIFO_CTL, 1);
-    //buffer[0] = 0;
-    //std::cout << "FIFO_CTL - writing: " << buffer;
-    //write(file_i2c, buffer, 1);
-
-    //std::cout << "POWER_CTL - writing: " << &ADXL375_POWER_CTL;
-    //write(file_i2c, &ADXL375_POWER_CTL, 1);
-    //buffer[0] = 8;
-    //std::cout << "POWER_CTL - writing: " << buffer;
-    //write(file_i2c, buffer, 1);
-
-    //Offset x,y,z
 return;
 }
 
 void read_axes()
 {
-    unsigned char outbuffer[1] = {0};
-    //Contact output registers:
-    outbuffer[0] = ADXL375_DATAX0;
-    ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
-    if (w!=sizeof(outbuffer)) {
-        std::cout << "Could not write full array" << std::endl;
-        exit(0);
-    }
-    if (w<0) {
-        std::cout << "Write error" << std::endl;
-        exit(0);
-    }
+    //Contact data register
+    i2c_write(ADXL375_DATAX0,0b00000000);
 
     //Read what it sends
     ssize_t const r { read(file_i2c, a, sizeof(a))};
@@ -170,7 +122,7 @@ int main()
 {
     open_bus();                      //Open I²C bus.
     connect_device(ADXL375_DEVICE1); //Establish connection to device.
-    setup(0,0,0);    //Start the accelerometer and set offsets.
+    setup(-1,0,-1);    //Start the accelerometer and set offsets.
 
     while (true)
     {
@@ -181,7 +133,7 @@ int main()
 	    printf("%d",a[i]);
 	    printf(" ");
         }
-	usleep(200000);
+	usleep(100000);
 	printf("\n");
 	int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 	float x = x_raw/20.5;
