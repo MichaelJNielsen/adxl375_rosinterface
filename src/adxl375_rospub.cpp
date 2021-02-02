@@ -101,8 +101,8 @@ void setup(int OFSX, int OFSY, int OFSZ)
     i2c_write(ADXL375_POWER_CTL, 0b00000000);
     usleep(20000);
 
-    //Set bandwidth and output data rate 50Hz
-    i2c_write(ADXL375_BW_RATE,0b00001001);
+    //Set bandwidth and output data rate
+    i2c_write(ADXL375_BW_RATE,0b00001011);
     usleep(2000);
 
     //Set FIFO to BypasS
@@ -128,8 +128,8 @@ int main(int argc, char **argv)
   float tmp_x, tmp_y, tmp_z;
   ros::init(argc, argv, "adxl_cppinterface");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<std_msgs::String>("ADXL375/Accel1", 1000);
-  ros::Rate loop_rate(50);
+  ros::Publisher chatter_pub = n.advertise<sensor_msgs::Imu>("ADXL375/Accel1", 1000);
+  ros::Rate loop_rate(2000);
   
   open_bus();                       //Open I²C bus
   connect_device(ADXL375_DEVICE1);  //Establish connection to device
