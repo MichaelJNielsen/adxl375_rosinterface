@@ -70,6 +70,26 @@ void i2c_write(unsigned char bytes0, unsigned char bytes1) {
 return;
 }
 
+void read_axes()
+{
+    //Contact data register
+    i2c_write(ADXL375_DATAX0,0b00000000);
+
+    //Read what it sends
+    ssize_t const r { read(file_i2c, a, sizeof(a))};
+    if (r!=sizeof(a)) {
+        std::cout << "Could not read full array" << std::endl;
+        printf("r = %ld", r);
+        printf("\n");
+        exit(0);
+    }
+    if (r<0) {
+        std::cout << "Read error" << std::endl;
+        exit(0);
+    }
+return;
+}
+
 void setup(int OFSX, int OFSY, int OFSZ)
 {
     //Set into standby mode
@@ -95,26 +115,6 @@ void setup(int OFSX, int OFSY, int OFSZ)
     i2c_write(ADXL375_OFSZ, OFSZ);
     usleep(20000);
 
-return;
-}
-
-void read_axes()
-{
-    //Contact data register
-    i2c_write(ADXL375_DATAX0,0b00000000);
-
-    //Read what it sends
-    ssize_t const r { read(file_i2c, a, sizeof(a))};
-    if (r!=sizeof(a)) {
-        std::cout << "Could not read full array" << std::endl;
-        printf("r = %ld", r);
-        printf("\n");
-        exit(0);
-    }
-    if (r<0) {
-        std::cout << "Read error" << std::endl;
-        exit(0);
-    }
 return;
 }
 
