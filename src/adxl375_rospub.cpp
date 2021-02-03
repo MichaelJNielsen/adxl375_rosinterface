@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "sensor_msgs/Imu.h"
+#include "adxl375_rosinterface/Accel.h"
 
 #include <unistd.h>			//Needed for I2C port
 #include <fcntl.h>			//Needed for I2C port
@@ -128,20 +129,21 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "adxl_cppinterface");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<sensor_msgs::Imu>("ADXL375/Accel1", 3);
+  ros::Publisher chatter_pub = n.advertise<adxl375_rosinterface::Accel>("ADXL375/Accel1", 3);
   ros::Rate loop_rate(400);
   
   open_bus();                       //Open I²C bus
   connect_device(ADXL375_DEVICE1);  //Establish connection to device
   setup(-1,0,-1);                   //Start the accelerometer and set offsets
   
-  sensor_msgs::Imu data1;
+  adxl375_rosinterface::Accel data1;
 
   while (ros::ok())
   {
-    read_axes(&data1.linear_acceleration.x, &data1.linear_acceleration.y, &data1.linear_acceleration.z);
+    read_axes(&data1.x, &data1.y, &data1.z);
+    data1.stamp = ros::Time::now();
     
-    //ROS_INFO("x: %f, y: %f, z: %f", data1.linear_acceleration.x, data1.linear_acceleration.y, data1.linear_acceleration.z);
+    //ROS_INFO("x: %f, y: %f, z: %f", data1.x, data1.y, data1.z);
     chatter_pub.publish(data1);
 
     ros::spinOnce();
