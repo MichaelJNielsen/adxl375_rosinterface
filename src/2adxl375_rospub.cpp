@@ -1,6 +1,4 @@
 #include "ros/ros.h"
-#include "std_msgs/String.h"
-#include "sensor_msgs/Imu.h"
 #include "adxl375_rosinterface/Accel.h"
 
 #include <unistd.h>			//Needed for I2C port
@@ -127,14 +125,14 @@ return;
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "adxl_cppinterface");
+  ros::init(argc, argv, "adxl2_cppinterface");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<adxl375_rosinterface::Accel>("ADXL375/Accel1", 3);
+  ros::Publisher chatter_pub = n.advertise<adxl375_rosinterface::Accel>("ADXL375/Accel2", 3);
   ros::Rate loop_rate(800);
   
   open_bus();                       //Open I²C bus
-  connect_device(ADXL375_DEVICE1);  //Establish connection to device
-  setup(-1,2,1);                   //Start the accelerometer and set offsets
+  connect_device(ADXL375_DEVICE2);  //Establish connection to device
+  setup(0,-2,-1);                   //Start the accelerometer and set offsets
   
   adxl375_rosinterface::Accel data1;
 

@@ -216,4 +216,10 @@ add_executable(adxl375_rospub src/adxl375_rospub.cpp)
 target_link_libraries(adxl375_rospub ${catkin_LIBRARIES})
 add_dependencies(adxl375_rospub adxl375_rosinterface_generate_messages_cpp)
 
+add_executable(2adxl375_rospub src/2adxl375_rospub.cpp)
+target_link_libraries(2adxl375_rospub ${catkin_LIBRARIES})
+add_dependencies(2adxl375_rospub adxl375_rosinterface_generate_messages_cpp)
 
+add_executable(sensor_logger src/sensor_logger.cpp)
+target_link_libraries(sensor_logger ${catkin_LIBRARIES})
+add_dependencies(sensor_logger adxl375_rosinterface_generate_messages_cpp)
