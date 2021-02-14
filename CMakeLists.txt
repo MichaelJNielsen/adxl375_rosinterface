@@ -117,6 +117,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
 # include
+  lib/xspublic
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -211,7 +212,7 @@ DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-
+link_directories(lib/xspublic/xscontroller lib/xspublic/xscommon lib/xspublic/xstypes lib/xspublic/deviceapi)
 add_executable(adxl375_rospub src/adxl375_rospub.cpp)
 target_link_libraries(adxl375_rospub ${catkin_LIBRARIES})
 add_dependencies(adxl375_rospub adxl375_rosinterface_generate_messages_cpp)
@@ -221,5 +222,12 @@ target_link_libraries(2adxl375_rospub ${catkin_LIBRARIES})
 add_dependencies(2adxl375_rospub adxl375_rosinterface_generate_messages_cpp)
 
 add_executable(sensor_logger src/sensor_logger.cpp)
-target_link_libraries(sensor_logger ${catkin_LIBRARIES})
+target_link_libraries(
+	sensor_logger
+	xscontroller
+	xscommon
+	xstypes
+	pthread
+	dl	
+	${catkin_LIBRARIES})
 add_dependencies(sensor_logger adxl375_rosinterface_generate_messages_cpp)

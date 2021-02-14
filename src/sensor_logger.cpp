@@ -17,15 +17,26 @@
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Joy.h"
 
+#include <xscontroller/xscontrol_def.h>
+#include <xscontroller/xsdevice_def.h>
+#include <xscontroller/xsscanner.h>
+#include <xstypes/xsoutputconfigurationarray.h>
+#include <xstypes/xsdatapacket.h>
+#include <xstypes/xstime.h>
+#include <xscommon/xsens_mutex.h>
+
+#include <iomanip>
+#include <list>
+
+Journaller* gJournal = 0;
+
 using namespace std;
 
 //--------------------------------- Global Variables ---------------------------------------------------------------
 geometry_msgs::TransformStamped vicon_data;
 serial_interface::Razorimu seye_data;
-xsens_mti_driver::nine_dof_imu xsens_data;
 sensor_msgs::Imu djiimu_data;
 sensor_msgs::Joy djirc_data;
-
 
 int csv_file;
 std::string dotfile;
@@ -50,7 +61,7 @@ unsigned char a[6] = {0};
 
 
 
-//--------------------------------- Various functions ---------------------------------------------------------------
+//--------------------------------- Time functions ---------------------------------------------------------------
 //Get time stamp in milli seconds
 uint64_t millis()
 {
@@ -66,7 +77,167 @@ uint64_t micros()
 }
 
 
-//--------------------------------- I2C functions and variables ------------------------------------------------------
+//---------------------------------Xsens reader functions------------------------------------------------------------
+
+class CallbackHandler : public XsCallback
+{
+public:
+	CallbackHandler(size_t maxBufferSize = 5)
+		: m_maxNumberOfPacketsInBuffer(maxBufferSize)
+		, m_numberOfPacketsInBuffer(0)
+	{
+	}
+
+	virtual ~CallbackHandler() throw()
+	{
+	}
+
+	bool packetAvailable() const
+	{
+		xsens::Lock locky(&m_mutex);
+		return m_numberOfPacketsInBuffer > 0;
+	}
+
+	XsDataPacket getNextPacket()
+	{
+		assert(packetAvailable());
+		xsens::Lock locky(&m_mutex);
+		XsDataPacket oldestPacket(m_packetBuffer.front());
+		m_packetBuffer.pop_front();
+		--m_numberOfPacketsInBuffer;
+		return oldestPacket;
+	}
+
+protected:
+	void onLiveDataAvailable(XsDevice*, const XsDataPacket* packet) override
+	{
+		xsens::Lock locky(&m_mutex);
+		assert(packet != 0);
+		while (m_numberOfPacketsInBuffer >= m_maxNumberOfPacketsInBuffer)
+			(void)getNextPacket();
+
+		m_packetBuffer.push_back(*packet);
+		++m_numberOfPacketsInBuffer;
+		assert(m_numberOfPacketsInBuffer <= m_maxNumberOfPacketsInBuffer);
+	}
+private:
+	mutable xsens::Mutex m_mutex;
+
+	size_t m_maxNumberOfPacketsInBuffer;
+	size_t m_numberOfPacketsInBuffer;
+	list<XsDataPacket> m_packetBuffer;
+};
+
+CallbackHandler callback;
+
+void xsens_setup()
+{
+	cout << "Creating XsControl object..." << endl;
+	XsControl* control = XsControl::construct();
+	assert(control != 0);
+
+	// Lambda function for error handling
+	auto handleError = [=](string errorString)
+	{
+		control->destruct();
+		cout << errorString << endl;
+		cout << "Press [ENTER] to continue." << endl;
+		cin.get();
+		exit(0);
+	};
+
+	cout << "Scanning for devices..." << endl;
+	XsPortInfoArray portInfoArray = XsScanner::scanPorts();
+	// Find an MTi device
+	XsPortInfo mtPort;
+	for (auto const &portInfo : portInfoArray)
+	{
+		if (portInfo.deviceId().isMti() || portInfo.deviceId().isMtig())
+		{
+			mtPort = portInfo;
+			break;
+		}
+	}
+	if (mtPort.empty())
+	{
+		printf("No MTi device found. Aborting.");
+		exit(0);
+	}
+	cout << "Found a device with ID: " << mtPort.deviceId().toString().toStdString() << " @ port: " << mtPort.portName().toStdString() << ", baudrate: " << mtPort.baudrate() << endl;
+	cout << "Opening port..." << endl;
+	if (!control->openPort(mtPort.portName().toStdString(), mtPort.baudrate()))
+	{
+		printf("Could not open port. Aborting.");
+		exit(0);
+	}
+	// Get the device object
+	XsDevice* device = control->device(mtPort.deviceId());
+	assert(device != 0);
+
+	cout << "Device: " << device->productCode().toStdString() << ", with ID: " << device->deviceId().toString() << " opened." << endl;
+		
+	// Create and attach callback handler to device
+	//CallbackHandler callback;	//Made this global...
+	device->addCallbackHandler(&callback);
+
+	cout << "Putting device into measurement mode..." << endl;
+	if (!device->gotoMeasurement())
+	{
+		printf("Could not put device into measurement mode. Aborting.");
+		exit(0);
+	}
+
+	cout << "Starting recording..." << endl;
+	if (!device->startRecording())
+	{
+		printf("Failed to start recording. Aborting.");
+		exit(0);
+	}
+	usleep(100000);
+	printf("Xsens ready to record \n");
+return;
+}
+
+void xsens_read(xsens_mti_driver::nine_dof_imu &msg)
+{
+	int i = 0;
+	while (i == 0)
+	{
+		if (callback.packetAvailable())
+		{
+			XsDataPacket packet = callback.getNextPacket();
+			if (packet.containsRawData())
+			{
+
+				msg.stamp = ros::Time::now();
+
+				XsScrData data = packet.rawData();
+
+            			msg.acc_x = -1*(0.00238555*data.m_acc[0] - 0.000012349*data.m_acc[1] - 0.0000155809*data.m_acc[2] - 77.2247);
+            			msg.acc_y = 0.0000108991*data.m_acc[0] + 0.0023431*data.m_acc[1] - 0.0000108443*data.m_acc[2] - 76.7395;
+            			msg.acc_z = 0.00000732219*data.m_acc[1] - 0.000013511*data.m_acc[0] + 0.0023663*data.m_acc[2] - 77.3443;
+            
+           			msg.gyro_x = 0.000323147*data.m_gyr[0] - 0.00000435472*data.m_gyr[1] - 6.53455e-7*data.m_gyr[2] - 10.4746;
+            			msg.gyro_y = -1*(0.000000997*data.m_gyr[0] + 0.000326813*data.m_gyr[1] - 0.00000520815*data.m_gyr[2] - 10.4636);
+            			msg.gyro_z = -1*(0.00000344737*data.m_gyr[0] + 0.00000462106*data.m_gyr[1] + 0.000326496*data.m_gyr[2] - 11.0188);
+            
+            			msg.mag_x = 0.00235686*data.m_mag[0] + 0.000106221*data.m_mag[1] - 0.0000979062*data.m_mag[2] - 77.3397;
+            			msg.mag_y = 0.0022755*data.m_mag[1] - 0.0000719264*data.m_mag[0] + 0.0000885163*data.m_mag[2] - 75.1698;
+            			msg.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;      
+			}
+			else {
+				printf("Packet does not contain raw data \n");
+				exit(0);
+			}
+		i++;	
+		}
+	}
+return;
+}
+
+
+
+//--------------------------------- I2C functions --------------------------------------------------------------------
 
 void open_bus() {
     char *filename = (char*)"/dev/i2c-0"; //Define which i2c port we use. To see which one the device is connected to use "sudo i2cdetect -y 0" or 1
@@ -107,7 +278,7 @@ void i2c_write(unsigned char bytes0, unsigned char bytes1) {
 return;
 }
 
-void read_axes(int device_addr, double *x, double *y, double *z)
+void read_axes(int device_addr, adxl375_rosinterface::Accel &data)
 {
     //Establish connection to device
     connect_device(device_addr);
@@ -128,11 +299,13 @@ void read_axes(int device_addr, double *x, double *y, double *z)
     }
     
 	int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
-	*x = x_raw/20.5;
+	data.x = x_raw/20.5;
 	int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
-	*y = y_raw/20.5;
+	data.y = y_raw/20.5;
 	int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
-	*z = z_raw/20.5;
+	data.z = z_raw/20.5;
+
+	data.stamp = ros::Time::now();
 return;
 }
 
@@ -169,7 +342,7 @@ return;
 }
 
 
-//------------------------------ Write to CSV functions and variables ---------------------------------------
+//------------------------------ Write to CSV functions ---------------------------------------------------------
 void csv_write(string text) {
 	ssize_t const w { write(csv_file, text.c_str(), text.length())};
     	if (w != text.length()) {
@@ -231,7 +404,7 @@ void setup_csv()
 
 
 
-void csv_updater(adxl375_rosinterface::Accel accel1_data, adxl375_rosinterface::Accel accel2_data)  {
+void csv_updater(adxl375_rosinterface::Accel accel1_data, adxl375_rosinterface::Accel accel2_data, xsens_mti_driver::nine_dof_imu xsens_data)  {
 	static int start_flag = 0;
 	static time_t start = time(0);
 	static uint64_t start_us = micros();
@@ -287,11 +460,6 @@ void seyeCallback(serial_interface::Razorimu msg)
 	seye_data = msg;
 }
 
-void xsensCallback(xsens_mti_driver::nine_dof_imu msg)
-{
-	xsens_data = msg;
-}
-
 void djiimuCallback(sensor_msgs::Imu msg)
 {
 	djiimu_data = msg;
@@ -312,9 +480,8 @@ int main(int argc, char **argv)
   	ros::NodeHandle n;
 	ros::Subscriber sub1 = n.subscribe("/vicon/test_obj/test_obj", 1000, viconCallback);
 	ros::Subscriber sub2 = n.subscribe("/Razor_IMU/SafeEye", 1000, seyeCallback);
-	ros::Subscriber sub3 = n.subscribe("/imu/raw_data", 1000, xsensCallback);
-	ros::Subscriber sub4 = n.subscribe("/dji_sdk/imu", 1000, djiimuCallback);
-	ros::Subscriber sub5 = n.subscribe("/dji_sdk/rc", 1000, djircCallback);
+	ros::Subscriber sub3 = n.subscribe("/dji_sdk/imu", 1000, djiimuCallback);
+	ros::Subscriber sub4 = n.subscribe("/dji_sdk/rc", 1000, djircCallback);
 	ros::Rate loop_rate(800);	
 
   	//Open I²C bus
@@ -324,29 +491,31 @@ int main(int argc, char **argv)
   	setup(ADXL375_DEVICE1,-1,2,1);
   	setup(ADXL375_DEVICE2,0,-2,-1); 
 
- 	setup_csv();
-
 	adxl375_rosinterface::Accel accel1_data;
 	adxl375_rosinterface::Accel accel2_data;
-
+	xsens_mti_driver::nine_dof_imu xsens_data;
 	djirc_data.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
+
+	//Start xsens
+	xsens_setup();
+
+	//Setup csv header
+ 	setup_csv();
 
   	while (ros::ok())
   	{
-		read_axes(ADXL375_DEVICE1, &accel1_data.x, &accel1_data.y, &accel1_data.z);
-		accel1_data.stamp = ros::Time::now();
+		read_axes(ADXL375_DEVICE1, accel1_data);
 
-    		read_axes(ADXL375_DEVICE2, &accel2_data.x, &accel2_data.y, &accel2_data.z);
-    		accel2_data.stamp = ros::Time::now();
+    		read_axes(ADXL375_DEVICE2, accel2_data);
 
-    		csv_updater(accel1_data,accel2_data);
-		//printf("axes: %ld \n", djirc_data.axes);
-		//float tmp = djirc_data.axes[1];
-		//printf("tmp: %f \n", tmp);
+		xsens_read(xsens_data);
 
-    		ros::spinOnce();
+    		csv_updater(accel1_data,accel2_data,xsens_data);
+		
+		ros::spinOnce();
 
     		loop_rate.sleep();
+			
   	}
   	return 0;
 }
