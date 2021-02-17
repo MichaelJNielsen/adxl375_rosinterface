@@ -231,3 +231,35 @@ target_link_libraries(
 	dl	
 	${catkin_LIBRARIES})
 add_dependencies(sensor_logger adxl375_rosinterface_generate_messages_cpp)
+
+add_executable(adxl_xsens_logger src/adxl_xsens_logger.cpp)
+target_link_libraries(
+	adxl_xsens_logger
+	xscontroller
+	xscommon
+	xstypes
+	pthread
+	dl	
+	${catkin_LIBRARIES})
+add_dependencies(adxl_xsens_logger adxl375_rosinterface_generate_messages_cpp)
+
+add_executable(adxl_xsens_pub src/adxl_xsens_pub.cpp)
+target_link_libraries(
+	adxl_xsens_pub
+	xscontroller
+	xscommon
+	xstypes
+	pthread
+	dl	
+	${catkin_LIBRARIES})
+add_dependencies(adxl_xsens_pub adxl375_rosinterface_generate_messages_cpp)
+
+add_executable(razor_vicon_logger src/razor_vicon_logger.cpp)
+target_link_libraries(razor_vicon_logger ${catkin_LIBRARIES})
+add_dependencies(razor_vicon_logger adxl375_rosinterface_generate_messages_cpp)
+
+add_executable(dji_logger src/dji_logger.cpp)
+target_link_libraries(dji_logger ${catkin_LIBRARIES})
+add_dependencies(dji_logger adxl375_rosinterface_generate_messages_cpp)
+
+
