@@ -17,6 +17,7 @@
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Joy.h"
 #include <thread>
+#include <fstream>
 
 //Libraries for xsens
 #include <xscontroller/xscontrol_def.h>
@@ -43,6 +44,7 @@ string data_string;
 
 int csv_file;
 std::string dotfile;
+ofstream outputFile;
 
 //Device address
 const int ADXL375_DEVICE1 = 0x53; //1010011
@@ -430,7 +432,7 @@ void setup_csv()
     }
     else {
         printf("Creating file \n");
-	csv_file = open(dotfile.c_str(), O_CREAT | O_WRONLY, 00444);
+	csv_file = open(dotfile.c_str(), O_CREAT | O_WRONLY, 00744);
     }
     if (csv_file < 0) {
         printf("Failed to open specified file \n");
@@ -450,6 +452,7 @@ void setup_csv()
     header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + DJI + "\n";
 
     csv_write(header_string);
+    close(csv_file);
 return;
 }
 
@@ -496,6 +499,90 @@ void csv_updater()  {
 	//Collect and print
 	data_string = metadata_string + "," + vicon_string + "," + seye_string + "," + accel1_string + "," + accel2_string + "," + dji_string + "\n";
     	csv_write(data_string);
+return;
+}
+
+void setup_csv_lean()
+{
+	string file;
+    	char input;
+
+    	printf("Input desired file name \n");
+    	getline(cin, file);
+    	dotfile = file + ".csv";
+
+	ifstream ifile(dotfile);
+	if (ifile) {
+		printf("File already exists. Overwrite? [y/n] \n");
+		cin >> input;
+		if (input == 'y' || input == 'Y') {
+            		printf("Overwriting %s \n", dotfile.c_str());
+		}
+		else {
+	    	printf("Exiting, please try a different file name. \n");
+	    	exit(0);
+		}
+	}
+	outputFile.open(dotfile);
+    	printf("csv file opened \n");
+
+    	string header_string, metadata, vicon, SafeEye, Accel1, Accel2, DJI;
+
+    	metadata = "name, date, time_since_start";
+    	vicon =  "vicon_sequence, vicon_time_stamp, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
+    	SafeEye = "seye_razor_time_stamp, seye_razor_acc_x, seye_razor_acc_y, seye_razor_acc_z, seye_razor_gyro_x, seye_razor_gyro_y, seye_razor_gyro_z, seye_razor_mag_x, seye_razor_mag_y, seye_razor_mag_z";
+    	Accel1 = "accel1_xsens_time_stamp, accel1_xsens_acc_x,  accel1_xsens_acc_y, accel1_xsens_acc_z, accel1_xsens_gyro_x, accel1_xsens_gyro_y, accel1_xsens_gyro_z, accel1_xsens_mag_x, accel1_xsens_mag_y, accel1_xsens_mag_z, accel1_adxl_sequence, accel1_adxl_acc_x, accel1_adxl_acc_y, accel1_adxl_acc_z";
+    	Accel2 = "accel2_adxl_sequence, accel2_adxl_acc_x, accel2_adxl_acc_y, accel2_adxl_acc_z";
+    	DJI = "dji_imu_sequence, dji_imu_time_stamp, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp, rc_roll, rc_pitch, rc_yaw, rc_throttle";
+
+    	header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + DJI + "\n";
+
+	printf("Writing header \n");
+	outputFile << header_string;
+return;
+}
+
+void csv_updater_lean()
+{
+	static int start_flag = 0;
+	static time_t start = time(0);
+	static uint64_t start_us = micros();
+	string metadata_string;
+
+	//Metadata
+	if (start_flag == 0) {
+		printf("start = %d \n", start);
+		tm *ltm = localtime(&start);
+		int year = 1900 + ltm->tm_year;
+		int month = 1+ltm->tm_mon;
+		int day = ltm->tm_mday;
+		metadata_string = dotfile + "," + std::to_string(year) + std::to_string(month) + std::to_string(day);
+		start_flag = 1;
+	}
+	else {
+		metadata_string = " , ";
+	}
+	time_t now = micros();
+	time_t time_since_start = now-start_us;
+
+	//metadata
+	outputFile << metadata_string << "," << time_since_start << ",";
+
+	//vicon
+	outputFile << vicon_data.header.seq << "," << vicon_data.header.stamp.sec << "." << vicon_data.header.stamp.nsec << "," << vicon_data.transform.translation.x << "," << vicon_data.transform.translation.y << "," << vicon_data.transform.translation.z << "," << vicon_data.transform.rotation.x << "," << vicon_data.transform.rotation.y << "," << vicon_data.transform.rotation.z << "," << vicon_data.transform.rotation.w << ","; 
+
+	//seye
+	outputFile << seye_data.time_stamp << "," << seye_data.acc_x << "," << seye_data.acc_y << "," << seye_data.acc_z << "," << seye_data.gyro_x << "," << seye_data.gyro_y << "," << seye_data.gyro_z << "," << seye_data.mag_x << "," << seye_data.mag_y << "," << seye_data.mag_z << ",";
+
+	//accel1
+	outputFile << xsens_data.stamp.sec << "." << xsens_data.stamp.nsec << "," << xsens_data.acc_x << "," << xsens_data.acc_y << "," << xsens_data.acc_z << "," << xsens_data.gyro_x << "," << xsens_data.gyro_y << "," << xsens_data.gyro_z << "," << xsens_data.mag_x << "," <<  xsens_data.mag_y << "," <<  xsens_data.mag_z << "," << accel1_data.stamp.sec << "." << accel1_data.stamp.nsec << "," << accel1_data.x << "," << accel1_data.y << "," << accel1_data.z << ",";
+
+	//accel2
+	outputFile << accel2_data.stamp.sec << "." << accel2_data.stamp.nsec << "," << accel2_data.x << "," << accel2_data.y << "," << accel2_data.z << ",";
+
+	//dji
+	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "." << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "." << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
+
 return;
 }
 
@@ -588,7 +675,7 @@ int main(int argc, char **argv)
 	xsens_setup();
 
 	//Setup csv header
- 	setup_csv();
+ 	setup_csv_lean();
 
 	thread t1(read_two_axes);
 	thread t2(ros_spinner);
@@ -598,7 +685,8 @@ int main(int argc, char **argv)
   	{
 		time_t time1 = micros();
 
-    		csv_updater();
+    		//csv_updater();
+		csv_updater_lean();
 
 		time_t time2 = micros();
 		time_t duration = time2-time1;
