@@ -593,14 +593,12 @@ int main(int argc, char **argv)
 	thread t1(read_two_axes);
 	thread t2(ros_spinner);
 	thread t3(xsens_read);
-	//thread t4(csv_thread);
 
   	while (ros::ok())
   	{
 		time_t time1 = micros();
 
     		csv_updater();
-		//ros::spinOnce();
 
 		time_t time2 = micros();
 		time_t duration = time2-time1;
