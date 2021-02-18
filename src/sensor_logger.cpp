@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
-#include "adxl375_rosinterface/Accel.h"
+#include "adxl375_rosinterface/adxl.h"
 #include <string>
 #include <ctime>
 #include <chrono>
 #include "std_msgs/String.h"
 #include "geometry_msgs/TransformStamped.h"
 #include "serial_interface/Razorimu.h"
-#include "xsens_mti_driver/nine_dof_imu.h"
+#include "xsens_mti_driver/xsens_imu.h"
 #include "sensor_msgs/Imu.h"
 #include "sensor_msgs/Joy.h"
 #include <thread>
@@ -37,9 +37,9 @@ geometry_msgs::TransformStamped vicon_data;
 serial_interface::Razorimu seye_data;
 sensor_msgs::Imu djiimu_data;
 sensor_msgs::Joy djirc_data;
-adxl375_rosinterface::Accel accel1_data;
-adxl375_rosinterface::Accel accel2_data;
-xsens_mti_driver::nine_dof_imu xsens_data;
+adxl375_rosinterface::adxl accel1_data;
+adxl375_rosinterface::adxl accel2_data;
+xsens_mti_driver::xsens_imu xsens_data;
 string data_string;
 
 int csv_file;
@@ -62,7 +62,10 @@ const int ADXL375_OFSZ = 0x20;          //100000
 int file_i2c;
 unsigned char a[6] = {0};
 
-Journaller* gJournal = 0;	//Used by xsens
+Journaller* gJournal;	//Used by xsens
+XsDevice* device;
+XsControl* control;
+XsPortInfo mtPort;
 
 
 //--------------------------------- Time functions ---------------------------------------------------------------
@@ -144,7 +147,9 @@ CallbackHandler callback;
 void xsens_setup()
 {
 	cout << "Creating XsControl object..." << endl;
-	XsControl* control = XsControl::construct();
+	//XsControl* control = XsControl::construct(); //Made this global...
+	control = XsControl::construct();
+
 	assert(control != 0);
 
 	// Lambda function for error handling
@@ -159,8 +164,8 @@ void xsens_setup()
 
 	cout << "Scanning for devices..." << endl;
 	XsPortInfoArray portInfoArray = XsScanner::scanPorts();
+	//XsPortInfo mtPort; //Made this global...
 	// Find an MTi device
-	XsPortInfo mtPort;
 	for (auto const &portInfo : portInfoArray)
 	{
 		if (portInfo.deviceId().isMti() || portInfo.deviceId().isMtig())
@@ -182,7 +187,9 @@ void xsens_setup()
 		exit(0);
 	}
 	// Get the device object
-	XsDevice* device = control->device(mtPort.deviceId());
+	//XsDevice* device = control->device(mtPort.deviceId()); //Made this global...
+	device = control->device(mtPort.deviceId());
+
 	assert(device != 0);
 
 	cout << "Device: " << device->productCode().toStdString() << ", with ID: " << device->deviceId().toString() << " opened." << endl;
@@ -209,9 +216,27 @@ void xsens_setup()
 return;
 }
 
+void xsens_closer()
+{
+	printf("Xsens - stopping recording... \n");
+	if (!device->stopRecording()) {
+		printf("Failed to stop recording \n");
+		exit(0);
+	}
+
+	printf("Xsens - closing port... \n");
+	control->closePort(mtPort.portName().toStdString());
+
+	printf("Freeing XsControl object... \n");
+	control->destruct();
+
+	printf("Xsens succesfully closed \n");
+return;
+}
+
 void xsens_read()
 {
-	while (true)
+	while (ros::ok())
 	{
 		int i = 0;
 		auto time1 = micros();
@@ -221,8 +246,7 @@ void xsens_read()
 				XsDataPacket packet = callback.getNextPacket();
 				if (packet.containsRawData())
 				{
-
-					xsens_data.stamp = ros::Time::now();
+					static auto xsens_begin = micros();
 
 					XsScrData data = packet.rawData();
 
@@ -236,7 +260,9 @@ void xsens_read()
             
             				xsens_data.mag_x = 0.00235686*data.m_mag[0] + 0.000106221*data.m_mag[1] - 0.0000979062*data.m_mag[2] - 77.3397;
             				xsens_data.mag_y = 0.0022755*data.m_mag[1] - 0.0000719264*data.m_mag[0] + 0.0000885163*data.m_mag[2] - 75.1698;
-            				xsens_data.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;      
+            				xsens_data.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;    
+
+					xsens_data.stamp = micros()-xsens_begin;
 				}
 				else {
 					printf("Packet does not contain raw data \n");
@@ -266,11 +292,22 @@ void open_bus() {
     file_i2c = open(filename, O_RDWR); //Open the i2c bus as both read and write.
     if (file_i2c < 0)
     {
-        printf("Failed to open the specified i2c bus");
+        printf("Failed to open the specified i2c bus \n");
         exit(0);
     }
     usleep(20000);
 return; 
+}
+
+void close_bus() {
+	printf("Closing i2c bus \n");
+	int closer = close(file_i2c);
+	if (close < 0)
+	{
+		printf("Failed to close the specified i2c bus \n");
+		exit(0);
+	}
+return;
 }
 
 void connect_device(int device_addr) {
@@ -354,6 +391,7 @@ void read_axis(int device_addr, int dev)
     	}	
 
     	if (dev == 1) {
+		static auto accel1_begin = micros();
 		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 		accel1_data.x = x_raw/20.5;
 		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
@@ -361,9 +399,10 @@ void read_axis(int device_addr, int dev)
 		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
 		accel1_data.z = z_raw/20.5;
 
-		accel1_data.stamp = ros::Time::now();
+		accel1_data.stamp = micros()-accel1_begin;
     	}
     	if (dev == 2) {
+		static auto accel2_begin = micros();
 		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 		accel2_data.x = x_raw/20.5;
 		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
@@ -371,7 +410,7 @@ void read_axis(int device_addr, int dev)
 		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
 		accel2_data.z = z_raw/20.5;
 
-		accel2_data.stamp = ros::Time::now();
+		accel2_data.stamp = micros()-accel2_begin;
     	}
 return;
 }
@@ -379,7 +418,7 @@ return;
 void read_two_axes()
 {
 
-	while (true) 
+	while (ros::ok()) 
 	{
 		auto time1 = micros();
 
@@ -402,112 +441,6 @@ return;
 
 
 //------------------------------ Write to CSV functions ---------------------------------------------------------
-void csv_write(string text) {
-	ssize_t const w { write(csv_file, text.c_str(), text.length())};
-    	if (w != text.length()) {
-		printf("Could not write full string \n");
-		exit(0);
-    	}
-    	if (w<0) {
-		printf("Write error \n");
-		exit(0);
-    	}
-return;
-}
-
-void setup_csv()
-{
-    string file;
-    char input;
-
-    printf("Input desired file name \n");
-    getline(cin, file);
-    dotfile = file + ".csv";
-
-    csv_file = open(dotfile.c_str(), O_WRONLY);
-    if (csv_file > 0) {
-	printf("File already exists. Overwrite? [y/n] \n");
-	cin >> input;
-	if (input == 'y' || input == 'Y') {
-            printf("Overwriting %s \n", dotfile.c_str());
-	}
-	else {
-	    close(csv_file);
-	    printf("Exiting, please try a different file name. \n");
-	    exit(0);
-	}
-    }
-    else {
-        printf("Creating file \n");
-	csv_file = open(dotfile.c_str(), O_CREAT | O_WRONLY, 00744);
-    }
-    if (csv_file < 0) {
-        printf("Failed to open specified file \n");
-	exit(0);
-    }
-    printf("csv file opened \n");
-
-    string header_string, metadata, vicon, SafeEye, Accel1, Accel2, DJI;
-
-    metadata = "name, date, time_since_start";
-    vicon =  "vicon_sequence, vicon_time_stamp, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
-    SafeEye = "seye_razor_time_stamp, seye_razor_acc_x, seye_razor_acc_y, seye_razor_acc_z, seye_razor_gyro_x, seye_razor_gyro_y, seye_razor_gyro_z, seye_razor_mag_x, seye_razor_mag_y, seye_razor_mag_z";
-    Accel1 = "accel1_xsens_time_stamp, accel1_xsens_acc_x,  accel1_xsens_acc_y, accel1_xsens_acc_z, accel1_xsens_gyro_x, accel1_xsens_gyro_y, accel1_xsens_gyro_z, accel1_xsens_mag_x, accel1_xsens_mag_y, accel1_xsens_mag_z, accel1_adxl_sequence, accel1_adxl_acc_x, accel1_adxl_acc_y, accel1_adxl_acc_z";
-    Accel2 = "accel2_adxl_sequence, accel2_adxl_acc_x, accel2_adxl_acc_y, accel2_adxl_acc_z";
-    DJI = "dji_imu_sequence, dji_imu_time_stamp, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp, rc_roll, rc_pitch, rc_yaw, rc_throttle";
-
-    header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + DJI + "\n";
-
-    csv_write(header_string);
-    close(csv_file);
-return;
-}
-
-
-
-void csv_updater()  {
-	static int start_flag = 0;
-	static time_t start = time(0);
-	static auto start_us = micros();
-	string metadata_string, vicon_string, seye_string, accel1_string, accel2_string, dji_string;
-
-	//vicon
-	vicon_string = to_string(vicon_data.header.seq) + "," + to_string(vicon_data.header.stamp.sec) + "." + to_string(vicon_data.header.stamp.nsec*10^-8) + "," + to_string(vicon_data.transform.translation.x) + "," + to_string(vicon_data.transform.translation.y) + "," + to_string(vicon_data.transform.translation.z) + "," + to_string(vicon_data.transform.rotation.x) + "," + to_string(vicon_data.transform.rotation.y) + "," + to_string(vicon_data.transform.rotation.z) + "," + to_string(vicon_data.transform.rotation.w);
-
-	//seye
-	seye_string = to_string(seye_data.time_stamp) + "," + to_string(seye_data.acc_x) + "," + to_string(seye_data.acc_y) + "," + to_string(seye_data.acc_z) + "," + to_string(seye_data.gyro_x) + "," + to_string(seye_data.gyro_y) + "," + to_string(seye_data.gyro_z) + "," + to_string(seye_data.mag_x) + "," + to_string(seye_data.mag_y) + "," + to_string(seye_data.mag_z);
-
-	//accel1
-	accel1_string = to_string(xsens_data.stamp.sec) + "." + to_string(xsens_data.stamp.nsec*10^-8) + "," + to_string(xsens_data.acc_x) + "," + to_string(xsens_data.acc_y) + "," + to_string(xsens_data.acc_z) + "," + to_string(xsens_data.gyro_x) + "," +  to_string(xsens_data.gyro_y) + "," +  to_string(xsens_data.gyro_z) + "," + to_string(xsens_data.mag_x) + "," +  to_string(xsens_data.mag_y) + "," +  to_string(xsens_data.mag_z) + "," + to_string(accel1_data.stamp.sec) + "." + to_string(accel1_data.stamp.nsec*10^-8) + "," + to_string(accel1_data.x) + "," + to_string(accel1_data.y) + "," + to_string(accel1_data.z);
-	
-	//accel2
-	accel2_string = to_string(accel2_data.stamp.sec) + "." + to_string(accel2_data.stamp.nsec*10^-8) + "," + to_string(accel2_data.x) + "," + to_string(accel2_data.y) + "," + to_string(accel2_data.z);
-
-	//dji
-	dji_string = to_string(djiimu_data.header.seq) + "," + to_string(djiimu_data.header.stamp.sec) + "." + to_string(djiimu_data.header.stamp.nsec*10^-8) + "," + to_string(djiimu_data.orientation.x) + "," + to_string(djiimu_data.orientation.y) + "," + to_string(djiimu_data.orientation.z) + "," + to_string(djiimu_data.orientation.w) + "," + to_string(djiimu_data.angular_velocity.x) + "," + to_string(djiimu_data.angular_velocity.y) + "," + to_string(djiimu_data.angular_velocity.z) + "," + to_string(djiimu_data.linear_acceleration.x) + "," +  to_string(djiimu_data.linear_acceleration.y) + "," +  to_string(djiimu_data.linear_acceleration.z) + "," + to_string(djirc_data.header.seq) + "," + to_string(djirc_data.header.stamp.sec) + "." + to_string(djirc_data.header.stamp.nsec * 10^-8) + "," + to_string(djirc_data.axes[0]) + "," + to_string(djirc_data.axes[1]) + "," + to_string(djirc_data.axes[2]) + "," + to_string(djirc_data.axes[3]);
-
-	//Metadata
-	if (start_flag == 0) {
-		printf("start = %d \n", start);
-		tm *ltm = localtime(&start);
-		int year = 1900 + ltm->tm_year;
-		int month = 1+ltm->tm_mon;
-		int day = ltm->tm_mday;
-		metadata_string = dotfile + "," + std::to_string(year) + std::to_string(month) + std::to_string(day) + ",";
-		start_flag = 1;
-	}
-	else {
-		metadata_string = " , ,";
-	}
-	auto now = micros();
-	auto time_since_start = now-start_us;
-	metadata_string = metadata_string + std::to_string(time_since_start);
-
-	//Collect and print
-	data_string = metadata_string + "," + vicon_string + "," + seye_string + "," + accel1_string + "," + accel2_string + "," + dji_string + "\n";
-    	csv_write(data_string);
-return;
-}
 
 void setup_csv_lean()
 {
@@ -582,10 +515,10 @@ void csv_updater_lean()
 	outputFile << seye_data.time_stamp << "," << seye_data.acc_x << "," << seye_data.acc_y << "," << seye_data.acc_z << "," << seye_data.gyro_x << "," << seye_data.gyro_y << "," << seye_data.gyro_z << "," << seye_data.mag_x << "," << seye_data.mag_y << "," << seye_data.mag_z << ",";
 
 	//accel1
-	outputFile << xsens_data.stamp.sec << "." << xsens_data.stamp.nsec << "," << xsens_data.acc_x << "," << xsens_data.acc_y << "," << xsens_data.acc_z << "," << xsens_data.gyro_x << "," << xsens_data.gyro_y << "," << xsens_data.gyro_z << "," << xsens_data.mag_x << "," <<  xsens_data.mag_y << "," <<  xsens_data.mag_z << "," << accel1_data.stamp.sec << "." << accel1_data.stamp.nsec << "," << accel1_data.x << "," << accel1_data.y << "," << accel1_data.z << ",";
+	outputFile << xsens_data.stamp << "," << xsens_data.acc_x << "," << xsens_data.acc_y << "," << xsens_data.acc_z << "," << xsens_data.gyro_x << "," << xsens_data.gyro_y << "," << xsens_data.gyro_z << "," << xsens_data.mag_x << "," <<  xsens_data.mag_y << "," <<  xsens_data.mag_z << "," << accel1_data.stamp << "," << accel1_data.x << "," << accel1_data.y << "," << accel1_data.z << ",";
 
 	//accel2
-	outputFile << accel2_data.stamp.sec << "." << accel2_data.stamp.nsec << "," << accel2_data.x << "," << accel2_data.y << "," << accel2_data.z << ",";
+	outputFile << accel2_data.stamp << "," << accel2_data.x << "," << accel2_data.y << "," << accel2_data.z << ",";
 
 	//dji
 	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "." << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "." << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
@@ -622,7 +555,7 @@ return;
 
 void ros_spinner()
 {
-	while (true)
+	while (ros::ok())
 	{
 		time_t time1 = micros();
 		ros::spinOnce();
@@ -636,6 +569,7 @@ void ros_spinner()
 			nanosleep((const struct timespec[]){{0,1}}, NULL);
 		}
 	}
+return;
 }
 
 
@@ -669,6 +603,8 @@ int main(int argc, char **argv)
 	thread t2(ros_spinner);
 	thread t3(xsens_read);
 
+	usleep(10000);
+
   	while (ros::ok())
   	{
 		time_t time1 = micros();
@@ -686,6 +622,12 @@ int main(int argc, char **argv)
   	}
 	
 	printf("Interrupted! \n");
+	sleep(2);
+
+	xsens_closer();
+	close_bus();	
+	outputFile.close();
+
 
   	return 0;
 }
