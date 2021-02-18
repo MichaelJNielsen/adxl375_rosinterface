@@ -67,17 +67,24 @@ Journaller* gJournal = 0;	//Used by xsens
 
 //--------------------------------- Time functions ---------------------------------------------------------------
 //Get time stamp in milli seconds
-uint64_t millis()
+auto millis()
 {
-	uint64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 	return ms;
 }
 
 //Get time stamp in micro seconds
-uint64_t micros()
+auto micros()
 {
-	uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+	auto us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 	return us;
+}
+
+//Get time stamp in nano seconds
+auto nanos()
+{
+	auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+	return ns;
 }
 
 
@@ -207,7 +214,7 @@ void xsens_read()
 	while (true)
 	{
 		int i = 0;
-		time_t time1 = micros();
+		auto time1 = micros();
 		while (i == 0) {
 			if (callback.packetAvailable())
 			{
@@ -238,9 +245,9 @@ void xsens_read()
 			i++;
 			}
 		}
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-		while (duration < 1250)
+		auto time2 = micros();
+		auto duration = time2-time1;
+		while (duration < 1000)
 		{
 			time2 = micros();
 			duration = time2-time1;
@@ -374,15 +381,15 @@ void read_two_axes()
 
 	while (true) 
 	{
-		time_t time1 = micros();
+		auto time1 = micros();
 
 		read_axis(ADXL375_DEVICE1, 1);
 		read_axis(ADXL375_DEVICE2, 2);
 
-		time_t time2 = micros();
-		time_t duration = time2-time1;
+		auto time2 = micros();
+		auto duration = time2-time1;
 
-		while (duration < 1250)
+		while (duration < 1200)
 		{
 			time2 = micros();
 			duration = time2-time1;
@@ -461,7 +468,7 @@ return;
 void csv_updater()  {
 	static int start_flag = 0;
 	static time_t start = time(0);
-	static uint64_t start_us = micros();
+	static auto start_us = micros();
 	string metadata_string, vicon_string, seye_string, accel1_string, accel2_string, dji_string;
 
 	//vicon
@@ -492,8 +499,8 @@ void csv_updater()  {
 	else {
 		metadata_string = " , ,";
 	}
-	time_t now = micros();
-	time_t time_since_start = now-start_us;
+	auto now = micros();
+	auto time_since_start = now-start_us;
 	metadata_string = metadata_string + std::to_string(time_since_start);
 
 	//Collect and print
@@ -531,9 +538,9 @@ void setup_csv_lean()
     	metadata = "name, date, time_since_start";
     	vicon =  "vicon_sequence, vicon_time_stamp, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
     	SafeEye = "seye_razor_time_stamp, seye_razor_acc_x, seye_razor_acc_y, seye_razor_acc_z, seye_razor_gyro_x, seye_razor_gyro_y, seye_razor_gyro_z, seye_razor_mag_x, seye_razor_mag_y, seye_razor_mag_z";
-    	Accel1 = "accel1_xsens_time_stamp, accel1_xsens_acc_x,  accel1_xsens_acc_y, accel1_xsens_acc_z, accel1_xsens_gyro_x, accel1_xsens_gyro_y, accel1_xsens_gyro_z, accel1_xsens_mag_x, accel1_xsens_mag_y, accel1_xsens_mag_z, accel1_adxl_sequence, accel1_adxl_acc_x, accel1_adxl_acc_y, accel1_adxl_acc_z";
-    	Accel2 = "accel2_adxl_sequence, accel2_adxl_acc_x, accel2_adxl_acc_y, accel2_adxl_acc_z";
-    	DJI = "dji_imu_sequence, dji_imu_time_stamp, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp, rc_roll, rc_pitch, rc_yaw, rc_throttle";
+    	Accel1 = "accel1_xsens_time_stamp, accel1_xsens_acc_x,  accel1_xsens_acc_y, accel1_xsens_acc_z, accel1_xsens_gyro_x, accel1_xsens_gyro_y, accel1_xsens_gyro_z, accel1_xsens_mag_x, accel1_xsens_mag_y, accel1_xsens_mag_z, accel1_adxl_time_stamp, accel1_adxl_acc_x, accel1_adxl_acc_y, accel1_adxl_acc_z";
+    	Accel2 = "accel2_adxl_time_stamp, accel2_adxl_acc_x, accel2_adxl_acc_y, accel2_adxl_acc_z";
+    	DJI = "dji_imu_sequence, dji_imu_time_stamp, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_vel_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp, rc_roll, rc_pitch, rc_yaw, rc_throttle";
 
     	header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + DJI + "\n";
 
@@ -546,7 +553,7 @@ void csv_updater_lean()
 {
 	static int start_flag = 0;
 	static time_t start = time(0);
-	static uint64_t start_us = micros();
+	static auto start_us = micros();
 	string metadata_string;
 
 	//Metadata
@@ -562,8 +569,8 @@ void csv_updater_lean()
 	else {
 		metadata_string = " , ";
 	}
-	time_t now = micros();
-	time_t time_since_start = now-start_us;
+	auto now = micros();
+	auto time_since_start = now-start_us;
 
 	//metadata
 	outputFile << metadata_string << "," << time_since_start << ",";
@@ -584,25 +591,6 @@ void csv_updater_lean()
 	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "." << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "." << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
 
 return;
-}
-
-void csv_thread()
-{
-	while (true)
-	{
-		time_t time1 = micros();
-		csv_updater();
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-
-		while (duration < 1250)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
-	}
-	
 }
 
 
@@ -641,7 +629,7 @@ void ros_spinner()
 		time_t time2 = micros();
 		time_t duration = time2-time1;
 
-		while (duration < 5000)
+		while (duration < 1250)
 		{
 			time2 = micros();
 			duration = time2-time1;
@@ -685,7 +673,6 @@ int main(int argc, char **argv)
   	{
 		time_t time1 = micros();
 
-    		//csv_updater();
 		csv_updater_lean();
 
 		time_t time2 = micros();
@@ -697,5 +684,8 @@ int main(int argc, char **argv)
 			duration = time2-time1;
 		}
   	}
+	
+	printf("Interrupted! \n");
+
   	return 0;
 }
