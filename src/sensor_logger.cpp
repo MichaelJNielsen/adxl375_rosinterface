@@ -90,6 +90,18 @@ auto nanos()
 	return ns;
 }
 
+auto csv_clock = chrono::high_resolution_clock::now();
+auto adxl_clock = chrono::high_resolution_clock::now();
+auto xsens_clock = chrono::high_resolution_clock::now();
+auto rosspin_clock = chrono::high_resolution_clock::now();
+
+void rate(chrono::high_resolution_clock::time_point &clock, int rate)
+{
+    clock = clock + chrono::nanoseconds(rate);
+    this_thread::sleep_until(clock);
+return;
+}
+
 
 //---------------------------------Xsens reader functions------------------------------------------------------------
 
@@ -238,8 +250,8 @@ void xsens_read()
 {
 	while (ros::ok())
 	{
+	    thread xsenstime_thread(rate,ref(xsens_clock),1250000);
 		int i = 0;
-		auto time1 = micros();
 		while (i == 0) {
 			if (callback.packetAvailable())
 			{
@@ -271,14 +283,7 @@ void xsens_read()
 			i++;
 			}
 		}
-		auto time2 = micros();
-		auto duration = time2-time1;
-		while (duration < 1000)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+        xsenstime_thread.join();
 	}
 return;
 }
@@ -417,23 +422,14 @@ return;
 
 void read_two_axes()
 {
-
 	while (ros::ok()) 
 	{
-		auto time1 = micros();
-
+        thread axistime_thread(rate, ref(adxl_clock), 1250000);
+        
 		read_axis(ADXL375_DEVICE1, 1);
 		read_axis(ADXL375_DEVICE2, 2);
-
-		auto time2 = micros();
-		auto duration = time2-time1;
-
-		while (duration < 1200)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+		
+		axistime_thread.join();
 	}
 return;
 }
@@ -557,17 +553,9 @@ void ros_spinner()
 {
 	while (ros::ok())
 	{
-		time_t time1 = micros();
+        thread rostime_thread(rate, ref(rosspin_clock), 10000000);
 		ros::spinOnce();
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-
-		while (duration < 1250)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+        rostime_thread.join();
 	}
 return;
 }
@@ -607,18 +595,11 @@ int main(int argc, char **argv)
 
   	while (ros::ok())
   	{
-		time_t time1 = micros();
-
+        thread time_thread(rate, ref(csv_clock), 1250000)
+        
 		csv_updater_lean();
 
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-
-		while (duration < 1250)
-		{
-			time2 = micros();
-			duration = time2-time1;
-		}
+        time_thread.join();
   	}
 	
 	printf("Interrupted! \n");
