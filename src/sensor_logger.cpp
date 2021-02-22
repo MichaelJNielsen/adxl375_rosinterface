@@ -67,7 +67,6 @@ XsDevice* device;
 XsControl* control;
 XsPortInfo mtPort;
 
-
 //--------------------------------- Time functions ---------------------------------------------------------------
 //Get time stamp in milli seconds
 auto millis()
@@ -90,18 +89,12 @@ auto nanos()
 	return ns;
 }
 
-auto csv_clock = chrono::high_resolution_clock::now();
-auto adxl_clock = chrono::high_resolution_clock::now();
-auto xsens_clock = chrono::high_resolution_clock::now();
-auto rosspin_clock = chrono::high_resolution_clock::now();
-
 void rate(chrono::high_resolution_clock::time_point &clock, int rate)
 {
     clock = clock + chrono::nanoseconds(rate);
     this_thread::sleep_until(clock);
 return;
 }
-
 
 //---------------------------------Xsens reader functions------------------------------------------------------------
 
@@ -250,6 +243,7 @@ void xsens_read()
 {
 	while (ros::ok())
 	{
+	    static auto xsens_clock = chrono::high_resolution_clock::now();
 	    thread xsenstime_thread(rate,ref(xsens_clock),1250000);
 		int i = 0;
 		while (i == 0) {
@@ -424,6 +418,7 @@ void read_two_axes()
 {
 	while (ros::ok()) 
 	{
+	    static auto adxl_clock = chrono::high_resolution_clock::now();
         thread axistime_thread(rate, ref(adxl_clock), 1250000);
         
 		read_axis(ADXL375_DEVICE1, 1);
@@ -552,7 +547,8 @@ return;
 void ros_spinner()
 {
 	while (ros::ok())
-	{
+	{   
+	    static auto rosspin_clock = chrono::high_resolution_clock::now();
         thread rostime_thread(rate, ref(rosspin_clock), 10000000);
 		ros::spinOnce();
         rostime_thread.join();
@@ -595,6 +591,7 @@ int main(int argc, char **argv)
 
   	while (ros::ok())
   	{
+  	    static auto csv_clock = chrono::high_resolution_clock::now();
         thread time_thread(rate, ref(csv_clock), 1250000)
         
 		csv_updater_lean();
