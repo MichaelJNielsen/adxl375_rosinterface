@@ -18,6 +18,7 @@
 #include "sensor_msgs/Joy.h"
 #include <thread>
 #include <fstream>
+#include <queue>
 
 //Libraries for xsens
 #include <xscontroller/xscontrol_def.h>
@@ -95,6 +96,8 @@ void rate(chrono::high_resolution_clock::time_point &clock, int rate)
     this_thread::sleep_until(clock);
 return;
 }
+
+const auto global_start = micros();
 
 //---------------------------------Xsens reader functions------------------------------------------------------------
 
@@ -252,8 +255,6 @@ void xsens_read()
 				XsDataPacket packet = callback.getNextPacket();
 				if (packet.containsRawData())
 				{
-					static auto xsens_begin = micros();
-
 					XsScrData data = packet.rawData();
 
             				xsens_data.acc_x = -1*(0.00238555*data.m_acc[0] - 0.000012349*data.m_acc[1] - 0.0000155809*data.m_acc[2] - 77.2247);
@@ -268,7 +269,7 @@ void xsens_read()
             				xsens_data.mag_y = 0.0022755*data.m_mag[1] - 0.0000719264*data.m_mag[0] + 0.0000885163*data.m_mag[2] - 75.1698;
             				xsens_data.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;    
 
-					xsens_data.stamp = micros()-xsens_begin;
+					xsens_data.stamp = micros()-global_start;
 				}
 				else {
 					printf("Packet does not contain raw data \n");
@@ -390,7 +391,6 @@ void read_axis(int device_addr, int dev)
     	}	
 
     	if (dev == 1) {
-		static auto accel1_begin = micros();
 		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 		accel1_data.x = x_raw/20.5;
 		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
@@ -398,10 +398,9 @@ void read_axis(int device_addr, int dev)
 		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
 		accel1_data.z = z_raw/20.5;
 
-		accel1_data.stamp = micros()-accel1_begin;
+		accel1_data.stamp = micros()-global_start;
     	}
     	if (dev == 2) {
-		static auto accel2_begin = micros();
 		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
 		accel2_data.x = x_raw/20.5;
 		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
@@ -409,7 +408,7 @@ void read_axis(int device_addr, int dev)
 		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
 		accel2_data.z = z_raw/20.5;
 
-		accel2_data.stamp = micros()-accel2_begin;
+		accel2_data.stamp = micros()-global_start;
     	}
 return;
 }
@@ -477,7 +476,6 @@ void csv_updater_lean()
 {
 	static int start_flag = 0;
 	static time_t start = time(0);
-	static auto start_us = micros();
 	string metadata_string;
 
 	//Metadata
@@ -494,7 +492,7 @@ void csv_updater_lean()
 		metadata_string = " , ";
 	}
 	auto now = micros();
-	auto time_since_start = now-start_us;
+	auto time_since_start = now-global_start;
 
 	//metadata
 	outputFile << metadata_string << "," << time_since_start << ",";
