@@ -434,7 +434,7 @@ void read_axis(int device_addr, int dev)
 		int16_t x_raw = (a[1] << 8) | a[0];
 		accel1_data.x = x_raw/20.5;
 		int16_t y_raw = (a[3] << 8) | a[2];
-		accel1_data.y = y_raw/20.5;
+		accel1_data.y = -y_raw/20.5;
 		int16_t z_raw = (a[5] << 8) | a[4];
 		accel1_data.z = z_raw/20.5;
 
@@ -449,7 +449,7 @@ void read_axis(int device_addr, int dev)
 		int16_t x_raw = (a[1] << 8) | a[0];
 		accel2_data.x = x_raw/20.5;
 		int16_t y_raw = (a[3] << 8) | a[2];
-		accel2_data.y = y_raw/20.5;
+		accel2_data.y = -y_raw/20.5;
 		int16_t z_raw = (a[5] << 8) | a[4];
 		accel2_data.z = z_raw/20.5;
 
@@ -462,7 +462,7 @@ void read_axis(int device_addr, int dev)
 		//-------------------------------------------
 		adxl375_rosinterface::Accel alldata;
 		alldata.x = x_raw/20.5;
-		alldata.y = y_raw/20.5;
+		alldata.y = -y_raw/20.5;
 		alldata.z = z_raw/20.5;
 		alldata.x_raw = x_raw;
 		alldata.y_raw = y_raw;
