@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <iostream>
 #include "adxl375_rosinterface/adxl.h"
+#include "adxl375_rosinterface/Accel.h"
 #include <string>
 #include <ctime>
 #include <chrono>
@@ -18,6 +19,9 @@
 #include "sensor_msgs/Joy.h"
 #include <thread>
 #include <fstream>
+#include <queue>
+#include <math.h>
+#include <bitset>
 
 //Libraries for xsens
 #include <xscontroller/xscontrol_def.h>
@@ -33,15 +37,6 @@
 using namespace std;
 
 //--------------------------------- Global Variables ---------------------------------------------------------------
-geometry_msgs::TransformStamped vicon_data;
-serial_interface::Razorimu seye_data;
-sensor_msgs::Imu djiimu_data;
-sensor_msgs::Joy djirc_data;
-adxl375_rosinterface::adxl accel1_data;
-adxl375_rosinterface::adxl accel2_data;
-xsens_mti_driver::xsens_imu xsens_data;
-string data_string;
-
 int csv_file;
 std::string dotfile;
 ofstream outputFile;
@@ -67,6 +62,17 @@ XsDevice* device;
 XsControl* control;
 XsPortInfo mtPort;
 
+queue<adxl375_rosinterface::adxl>accel1_dataqueue;
+queue<adxl375_rosinterface::adxl>accel2_dataqueue;
+queue<xsens_mti_driver::xsens_imu>xsens_dataqueue;
+queue<geometry_msgs::TransformStamped> vicon_dataqueue;
+queue<serial_interface::Razorimu> seye_dataqueue;
+queue<sensor_msgs::Imu> djiimu_dataqueue;
+queue<sensor_msgs::Joy> djirc_dataqueue;
+queue<adxl375_rosinterface::Accel>alldata_accel2_dataqueue;
+
+unsigned char accel2_bytes[6];
+
 
 //--------------------------------- Time functions ---------------------------------------------------------------
 //Get time stamp in milli seconds
@@ -90,6 +96,14 @@ auto nanos()
 	return ns;
 }
 
+void rate(chrono::high_resolution_clock::time_point &clock, int rate)
+{
+    clock = clock + chrono::nanoseconds(rate);
+    this_thread::sleep_until(clock);
+return;
+}
+
+const auto global_start = micros();
 
 //---------------------------------Xsens reader functions------------------------------------------------------------
 
@@ -236,18 +250,18 @@ return;
 
 void xsens_read()
 {
+	xsens_mti_driver::xsens_imu xsens_data;
 	while (ros::ok())
 	{
+		static auto xsens_clock = chrono::high_resolution_clock::now();
+	    	thread xsenstime_thread(rate,ref(xsens_clock),1250000);
 		int i = 0;
-		auto time1 = micros();
 		while (i == 0) {
 			if (callback.packetAvailable())
 			{
 				XsDataPacket packet = callback.getNextPacket();
 				if (packet.containsRawData())
 				{
-					static auto xsens_begin = micros();
-
 					XsScrData data = packet.rawData();
 
             				xsens_data.acc_x = -1*(0.00238555*data.m_acc[0] - 0.000012349*data.m_acc[1] - 0.0000155809*data.m_acc[2] - 77.2247);
@@ -262,7 +276,8 @@ void xsens_read()
             				xsens_data.mag_y = 0.0022755*data.m_mag[1] - 0.0000719264*data.m_mag[0] + 0.0000885163*data.m_mag[2] - 75.1698;
             				xsens_data.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;    
 
-					xsens_data.stamp = micros()-xsens_begin;
+					xsens_data.stamp = micros()-global_start;
+					xsens_dataqueue.push(xsens_data);
 				}
 				else {
 					printf("Packet does not contain raw data \n");
@@ -271,14 +286,7 @@ void xsens_read()
 			i++;
 			}
 		}
-		auto time2 = micros();
-		auto duration = time2-time1;
-		while (duration < 1000)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+	        xsenstime_thread.join();
 	}
 return;
 }
@@ -369,6 +377,19 @@ void setup(int device_addr, int OFSX, int OFSY, int OFSZ)
 return;
 }
 
+void adxl_standby(int device_addr)
+{
+    //Establish connection to device
+    connect_device(device_addr);
+    
+    //Set into standby mode
+    i2c_write(ADXL375_POWER_CTL, 0b00000000);
+    usleep(20000);
+
+    printf("Device set to standby mode \n");
+return;
+}
+
 void read_axis(int device_addr, int dev)
 {
     	//Establish connection to device
@@ -391,49 +412,70 @@ void read_axis(int device_addr, int dev)
     	}	
 
     	if (dev == 1) {
-		static auto accel1_begin = micros();
-		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
+		adxl375_rosinterface::adxl accel1_data;
+		int16_t x_raw = (a[1] << 8) | a[0];
 		accel1_data.x = x_raw/20.5;
-		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
+		int16_t y_raw = (a[3] << 8) | a[2];
 		accel1_data.y = y_raw/20.5;
-		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
+		int16_t z_raw = (a[5] << 8) | a[4];
 		accel1_data.z = z_raw/20.5;
 
-		accel1_data.stamp = micros()-accel1_begin;
+		accel1_data.stamp = micros()-global_start;
+		accel1_dataqueue.push(accel1_data);
     	}
     	if (dev == 2) {
-		static auto accel2_begin = micros();
-		int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
+		adxl375_rosinterface::adxl accel2_data;
+		int16_t x_raw = (a[1] << 8) | a[0];
 		accel2_data.x = x_raw/20.5;
-		int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
+		int16_t y_raw = (a[3] << 8) | a[2];
 		accel2_data.y = y_raw/20.5;
-		int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
+		int16_t z_raw = (a[5] << 8) | a[4];
 		accel2_data.z = z_raw/20.5;
 
-		accel2_data.stamp = micros()-accel2_begin;
+		accel2_data.stamp = micros()-global_start;
+		accel2_dataqueue.push(accel2_data);
+
+		//-------------------------------------------
+		adxl375_rosinterface::Accel alldata;
+		alldata.x = x_raw/20.5;
+		alldata.y = y_raw/20.5;
+		alldata.z = z_raw/20.5;
+		alldata.x_raw = x_raw;
+		alldata.y_raw = y_raw;
+		alldata.z_raw = z_raw;
+	
+		//bitset<8> byte0(a[0]);
+		//bitset<8> byte1(a[1]);
+		//bitset<8> byte2(a[2]);
+		//bitset<8> byte3(a[3]);
+		//bitset<8> byte4(a[4]);
+		//bitset<8> byte5(a[5]);
+
+		alldata.byte0 = "fuck"; //byte0.to_string();
+		alldata.byte1 = "this"; //byte1.to_string();
+		alldata.byte2 = "fucking"; //byte2.to_string();
+		alldata.byte3 = "shitty"; //byte3.to_string();
+		alldata.byte4 = "bull"; //byte4.to_string();
+		alldata.byte5 = "shit"; //byte5.to_string();
+
+		alldata_accel2_dataqueue.push(alldata);
+		printf("pushed \n");
+		//cout << alldata << "\n";
     	}
 return;
 }
 
 void read_two_axes()
 {
-
 	while (ros::ok()) 
 	{
-		auto time1 = micros();
+		static auto adxl_clock = chrono::high_resolution_clock::now();
+        	thread axistime_thread(rate, ref(adxl_clock), 1250000);
 
 		read_axis(ADXL375_DEVICE1, 1);
 		read_axis(ADXL375_DEVICE2, 2);
 
-		auto time2 = micros();
-		auto duration = time2-time1;
-
-		while (duration < 1200)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+		axistime_thread.join();
 	}
 return;
 }
@@ -469,13 +511,16 @@ void setup_csv_lean()
     	string header_string, metadata, vicon, SafeEye, Accel1, Accel2, DJI;
 
     	metadata = "name, date, time_since_start";
-    	vicon =  "vicon_sequence, vicon_time_stamp, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
+    	vicon =  "vicon_sequence, vicon_time_stamp_sec, vicon_time_stamp_nsec, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
     	SafeEye = "seye_razor_time_stamp, seye_razor_acc_x, seye_razor_acc_y, seye_razor_acc_z, seye_razor_gyro_x, seye_razor_gyro_y, seye_razor_gyro_z, seye_razor_mag_x, seye_razor_mag_y, seye_razor_mag_z";
     	Accel1 = "accel1_xsens_time_stamp, accel1_xsens_acc_x,  accel1_xsens_acc_y, accel1_xsens_acc_z, accel1_xsens_gyro_x, accel1_xsens_gyro_y, accel1_xsens_gyro_z, accel1_xsens_mag_x, accel1_xsens_mag_y, accel1_xsens_mag_z, accel1_adxl_time_stamp, accel1_adxl_acc_x, accel1_adxl_acc_y, accel1_adxl_acc_z";
     	Accel2 = "accel2_adxl_time_stamp, accel2_adxl_acc_x, accel2_adxl_acc_y, accel2_adxl_acc_z";
-    	DJI = "dji_imu_sequence, dji_imu_time_stamp, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_vel_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp, rc_roll, rc_pitch, rc_yaw, rc_throttle";
 
-    	header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + DJI + "\n";
+	string all_data = "x, y, z, x_raw, y_raw, z_raw, byte0, byte1, byte2, byte3, byte4, byte5";	
+	
+	DJI = "dji_imu_sequence, dji_imu_time_stamp_sec, dji_imu_time_stamp_nsec, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_vel_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp_sec, rc_time_stamp_nsec, rc_roll, rc_pitch, rc_yaw, rc_throttle";
+
+    	header_string = metadata + "," + vicon + "," + SafeEye + "," + Accel1 + "," + Accel2 + ","  + all_data + "," + DJI + "\n";
 
 	printf("Writing header \n");
 	outputFile << header_string;
@@ -486,7 +531,6 @@ void csv_updater_lean()
 {
 	static int start_flag = 0;
 	static time_t start = time(0);
-	static auto start_us = micros();
 	string metadata_string;
 
 	//Metadata
@@ -502,14 +546,80 @@ void csv_updater_lean()
 	else {
 		metadata_string = " , ";
 	}
-	auto now = micros();
-	auto time_since_start = now-start_us;
+
+	auto time_since_start = micros()-global_start;
 
 	//metadata
 	outputFile << metadata_string << "," << time_since_start << ",";
 
+	//Queue read and pop
+	static xsens_mti_driver::xsens_imu xsens_data;
+	if (xsens_dataqueue.size() > 1)
+	{
+	       	xsens_data = xsens_dataqueue.front();
+		xsens_dataqueue.pop();
+	}
+	static adxl375_rosinterface::adxl accel1_data;
+	if (accel1_dataqueue.size() > 1)
+	{
+		accel1_data = accel1_dataqueue.front();
+		accel1_dataqueue.pop();
+	}
+
+	static adxl375_rosinterface::adxl accel2_data;
+	if (accel2_dataqueue.size() > 1)
+	{
+		accel2_data = accel2_dataqueue.front();
+		accel2_dataqueue.pop();
+	}
+
+	static geometry_msgs::TransformStamped vicon_data;
+	if (vicon_dataqueue.size() > 1)
+	{
+		vicon_data  = vicon_dataqueue.front();
+		vicon_dataqueue.pop();
+	}
+
+	serial_interface::Razorimu seye_data;
+	if (seye_dataqueue.size() > 1)
+	{
+		seye_data = seye_dataqueue.front();
+		seye_dataqueue.pop();
+	}
+
+	static sensor_msgs::Imu djiimu_data;
+	if (djiimu_dataqueue.size() > 1)
+	{
+		djiimu_data = djiimu_dataqueue.front();
+		djiimu_dataqueue.pop();
+	}
+
+	printf("rc \n");
+	static sensor_msgs::Joy djirc_data;
+	if (start_flag == 1)
+	{
+		djirc_data.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
+		start_flag = 2;
+	}
+	if (djirc_dataqueue.size() > 1)
+	{
+		djirc_data = djirc_dataqueue.front();
+		djirc_dataqueue.pop();
+	}
+
+	static adxl375_rosinterface::Accel alldata;
+	if (alldata_accel2_dataqueue.size() > 2)
+	{
+		int size = alldata_accel2_dataqueue.size();
+		printf("size = %d \n", size);
+		alldata = *alldata_accel2_dataqueue.front();
+		alldata_accel2_dataqueue.pop();
+		int post_size = alldata_accel2_dataqueue.size();
+		printf("postsize = %d \n", post_size);
+	}
+	printf("printing \n");
 	//vicon
-	outputFile << vicon_data.header.seq << "," << vicon_data.header.stamp.sec << "." << vicon_data.header.stamp.nsec << "," << vicon_data.transform.translation.x << "," << vicon_data.transform.translation.y << "," << vicon_data.transform.translation.z << "," << vicon_data.transform.rotation.x << "," << vicon_data.transform.rotation.y << "," << vicon_data.transform.rotation.z << "," << vicon_data.transform.rotation.w << ","; 
+	outputFile << vicon_data.header.seq << "," << vicon_data.header.stamp.sec << "," << vicon_data.header.stamp.nsec << "," << vicon_data.transform.translation.x << "," << vicon_data.transform.translation.y << "," << vicon_data.transform.translation.z << "," << vicon_data.transform.rotation.x << "," << vicon_data.transform.rotation.y << "," << vicon_data.transform.rotation.z << "," << vicon_data.transform.rotation.w << ","; 
 
 	//seye
 	outputFile << seye_data.time_stamp << "," << seye_data.acc_x << "," << seye_data.acc_y << "," << seye_data.acc_z << "," << seye_data.gyro_x << "," << seye_data.gyro_y << "," << seye_data.gyro_z << "," << seye_data.mag_x << "," << seye_data.mag_y << "," << seye_data.mag_z << ",";
@@ -520,8 +630,11 @@ void csv_updater_lean()
 	//accel2
 	outputFile << accel2_data.stamp << "," << accel2_data.x << "," << accel2_data.y << "," << accel2_data.z << ",";
 
+	//Alldata
+	outputFile << alldata.x << "," << alldata.y << "," << alldata.z << "," << alldata.x_raw << "," << alldata.y_raw << "," << alldata.z_raw << "," << alldata.byte0 << "," << alldata.byte1 << "," << alldata.byte2 << "," << alldata.byte3 << "," << alldata.byte4 << "," << alldata.byte5 << ",";
+	printf("printing dji \n");
 	//dji
-	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "." << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "." << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
+	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "," << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "," << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
 
 return;
 }
@@ -531,25 +644,26 @@ return;
 
 void viconCallback(geometry_msgs::TransformStamped msg)
 {
-	vicon_data = msg;
+	vicon_dataqueue.push(msg);
 return;
 }
 
 void seyeCallback(serial_interface::Razorimu msg)
 {
-	seye_data = msg;
+	seye_dataqueue.push(msg);
 return;
 }
 
 void djiimuCallback(sensor_msgs::Imu msg)
 {
-	djiimu_data = msg;
+	djiimu_dataqueue.push(msg);
 return;
 }
 
 void djircCallback(sensor_msgs::Joy msg)
 {
-	djirc_data = msg;
+	//msg.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
+	djirc_dataqueue.push(msg);
 return;
 }
 
@@ -557,21 +671,13 @@ void ros_spinner()
 {
 	while (ros::ok())
 	{
-		time_t time1 = micros();
+		static auto rosspin_clock = chrono::high_resolution_clock::now();
+	        thread rostime_thread(rate, ref(rosspin_clock), 10000000);
 		ros::spinOnce();
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-
-		while (duration < 1250)
-		{
-			time2 = micros();
-			duration = time2-time1;
-			nanosleep((const struct timespec[]){{0,1}}, NULL);
-		}
+        	rostime_thread.join();
 	}
 return;
 }
-
 
 
 //----------------------------- Main ----------------------------------------------------
@@ -579,10 +685,10 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "sensorlogger");
   	ros::NodeHandle n;
-	ros::Subscriber sub1 = n.subscribe("/vicon/test_obj/test_obj", 1000, viconCallback);
-	ros::Subscriber sub2 = n.subscribe("/Razor_IMU/SafeEye", 1000, seyeCallback);
-	ros::Subscriber sub3 = n.subscribe("/dji_sdk/imu", 1000, djiimuCallback);
-	ros::Subscriber sub4 = n.subscribe("/dji_sdk/rc", 1000, djircCallback);
+	ros::Subscriber sub1 = n.subscribe("/vicon/test_obj/test_obj", 1, viconCallback);
+	ros::Subscriber sub2 = n.subscribe("/Razor_IMU/SafeEye", 1, seyeCallback);
+	ros::Subscriber sub3 = n.subscribe("/dji_sdk/imu", 1, djiimuCallback);
+	ros::Subscriber sub4 = n.subscribe("/dji_sdk/rc", 1, djircCallback);
 
   	//Open I²C bus
   	open_bus();
@@ -590,8 +696,6 @@ int main(int argc, char **argv)
   	//Start the accelerometer and set offsets
   	setup(ADXL375_DEVICE1,-1,2,1);
   	setup(ADXL375_DEVICE2,0,-2,-1); 
-
-	djirc_data.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
 
 	//Start xsens
 	xsens_setup();
@@ -604,30 +708,25 @@ int main(int argc, char **argv)
 	thread t3(xsens_read);
 
 	usleep(10000);
+	printf("Ready \n");
 
-  	while (ros::ok())
+	while (ros::ok())
   	{
-		time_t time1 = micros();
-
+		static auto csv_clock = chrono::high_resolution_clock::now();
+	        thread time_thread(rate, ref(csv_clock), 1250000);
+		
 		csv_updater_lean();
 
-		time_t time2 = micros();
-		time_t duration = time2-time1;
-
-		while (duration < 1250)
-		{
-			time2 = micros();
-			duration = time2-time1;
-		}
+        	time_thread.join();
   	}
-	
+
 	printf("Interrupted! \n");
-	sleep(2);
+	sleep(1);
 
+	adxl_standby(ADXL375_DEVICE1);
+	adxl_standby(ADXL375_DEVICE2);
 	xsens_closer();
-	close_bus();	
+	close_bus();
 	outputFile.close();
-
-
   	return 0;
 }

@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
+#include <fstream>
+#include <signal.h>
+#include <string>
+#include <bitset>
+
+using namespace std;
 
 //Device address
 const int ADXL375_DEVICE1 = 0x53; //1010011
@@ -26,7 +32,21 @@ const int ADXL375_OFSZ = 0x20;          //100000
 
 int file_i2c;
 unsigned char a[6] = {0};
+int16_t x_raw; int16_t y_raw; int16_t z_raw;
 
+string dotfile;
+ofstream outputFile;
+
+//--------------------------- Termination sequence -------------------------------------
+void signal_callback_handler(int signum) {
+    printf("Interrupted! \n Closing csv file... \n");
+    outputFile.close();
+    exit(signum);
+}
+
+
+
+//-------------------------- I2C functions ---------------------------------------------
 void open_bus() {
     char *filename = (char*)"/dev/i2c-0"; //Define which i2c port we use. To see which one the device is connected to use "sudo i2cdetect -y 0" or 1
     file_i2c = open(filename, O_RDWR); //Open the i2c bus as both read and write.
@@ -46,9 +66,6 @@ void connect_device(int addr) {
 	    //ERROR HANDLING; you can check errno to see what went wrong
 	    exit(0);
     }
-    else
-        printf("Connected to device");
-    usleep(20000);
 return; 
 }
 
@@ -87,11 +104,11 @@ void read_axes(double *x, double *y, double *z)
         exit(0);
     }
     
-	int x_raw = int8_t(a[0]) | int8_t(a[1]) << 8;
+	x_raw = ((int)(a[0] | a[1] << 8));
 	*x = x_raw/20.5;
-	int y_raw = int8_t(a[2]) | int8_t(a[3]) << 8;
+	y_raw = ((int)(a[2] | a[3] << 8));
 	*y = y_raw/20.5;
-	int z_raw = int8_t(a[4]) | int8_t(a[5]) << 8;
+	z_raw = ((int)(a[4] | a[5] << 8));
 	*z = z_raw/20.5;
 return;
 }
@@ -125,16 +142,72 @@ void setup(int OFSX, int OFSY, int OFSZ)
 return;
 }
 
+
+
+
+
+//---------------------------------- CSV functions ---------------------------------------------------
+void csv_setup()
+{
+	string file;
+    	char input;
+
+    	printf("Input desired file name \n");
+    	getline(cin, file);
+    	dotfile = file + ".csv";
+
+	ifstream ifile(dotfile);
+	if (ifile) {
+		printf("File already exists. Overwrite? [y/n] \n");
+		cin >> input;
+		if (input == 'y' || input == 'Y') {
+            		printf("Overwriting %s \n", dotfile.c_str());
+		}
+		else {
+	    	printf("Exiting, please try a different file name. \n");
+	    	exit(0);
+		}
+	}
+	outputFile.open(dotfile);
+	printf("csv file opened \n");
+	
+	string header = "byte0 , byte1 , byte2 , byte3 , byte4 , byte5 , x_raw , y_raw , z_raw , x , y , z \n";
+	
+	printf("Writing header \n");
+	outputFile << header;
+return;
+}
+
+void csv_updater(float x, float y, float z)
+{
+	bitset<8> byte0(a[0]);
+	bitset<8> byte1(a[1]);
+	bitset<8> byte2(a[2]);
+	bitset<8> byte3(a[3]);
+	bitset<8> byte4(a[4]);
+	bitset<8> byte5(a[5]);
+	
+	outputFile << byte0 << "," << byte1 << "," << byte2 << "," << byte3 << "," << byte4 << "," << byte5 << "," << x_raw << "," << y_raw << "," << z_raw << "," << x << "," << y << "," << z << "\n" ;
+}
+
+
+
+
+
+
+//--------------------------------------- Main -----------------------------------------------
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "adxl_cppinterface");
   ros::NodeHandle n;
-  ros::Publisher chatter_pub = n.advertise<adxl375_rosinterface::Accel>("ADXL375/Accel1", 3);
+  //ros::Publisher chatter_pub = n.advertise<adxl375_rosinterface::Accel>("ADXL375/Accel1", 3);
   ros::Rate loop_rate(800);
   
   open_bus();                       //Open I²C bus
-  connect_device(ADXL375_DEVICE1);  //Establish connection to device
-  setup(-1,2,1);                   //Start the accelerometer and set offsets
+  connect_device(ADXL375_DEVICE2);  //Establish connection to device
+  //setup(-1,2,1);                   //Start the accelerometer and set offsets
+  setup(0,-2,-1);
+  csv_setup();
   
   adxl375_rosinterface::Accel data1;
 
@@ -142,9 +215,11 @@ int main(int argc, char **argv)
   {
     read_axes(&data1.x, &data1.y, &data1.z);
     data1.stamp = ros::Time::now();
+
+    csv_updater(data1.x, data1.y, data1.z);
     
     //ROS_INFO("x: %f, y: %f, z: %f", data1.x, data1.y, data1.z);
-    chatter_pub.publish(data1);
+    //chatter_pub.publish(data1);
 
     ros::spinOnce();
 
