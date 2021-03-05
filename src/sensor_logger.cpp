@@ -22,6 +22,7 @@
 #include <queue>
 #include <math.h>
 #include <bitset>
+#include <mutex>
 
 //Libraries for xsens
 #include <xscontroller/xscontrol_def.h>
@@ -35,6 +36,16 @@
 #include <list>
 
 using namespace std;
+
+//Mutexing used in queues
+mutex xsens_mtx;
+mutex accel1_mtx;
+mutex accel2_mtx;
+mutex seye_mtx;
+mutex vicon_mtx;
+mutex djiimu_mtx;
+mutex djirc_mtx;
+mutex alldata_mtx;
 
 //--------------------------------- Global Variables ---------------------------------------------------------------
 int csv_file;
@@ -53,15 +64,18 @@ const int ADXL375_DATAX0 = 0x32;        //110010
 const int ADXL375_OFSX = 0x1E;          //11110
 const int ADXL375_OFSY = 0x1F;          //11111
 const int ADXL375_OFSZ = 0x20;          //100000
+const int ADXL375_DATA_FORMAT = 0x31;
 
 int file_i2c;
 unsigned char a[6] = {0};
 
-Journaller* gJournal;	//Used by xsens
+//Used by xsens
+Journaller* gJournal;
 XsDevice* device;
 XsControl* control;
 XsPortInfo mtPort;
 
+//Queues
 queue<adxl375_rosinterface::adxl>accel1_dataqueue;
 queue<adxl375_rosinterface::adxl>accel2_dataqueue;
 queue<xsens_mti_driver::xsens_imu>xsens_dataqueue;
@@ -70,9 +84,6 @@ queue<serial_interface::Razorimu> seye_dataqueue;
 queue<sensor_msgs::Imu> djiimu_dataqueue;
 queue<sensor_msgs::Joy> djirc_dataqueue;
 queue<adxl375_rosinterface::Accel>alldata_accel2_dataqueue;
-
-unsigned char accel2_bytes[6];
-
 
 //--------------------------------- Time functions ---------------------------------------------------------------
 //Get time stamp in milli seconds
@@ -277,7 +288,10 @@ void xsens_read()
             				xsens_data.mag_z = 0.000199498*data.m_mag[0] + 0.0000234849*data.m_mag[1] + 0.0018866*data.m_mag[2] - 68.9712;    
 
 					xsens_data.stamp = micros()-global_start;
+
+					xsens_mtx.lock();
 					xsens_dataqueue.push(xsens_data);
+					xsens_mtx.unlock();
 				}
 				else {
 					printf("Packet does not contain raw data \n");
@@ -356,11 +370,15 @@ void setup(int device_addr, int OFSX, int OFSY, int OFSZ)
 
     //Set bandwidth and output data rate 800Hz
     i2c_write(ADXL375_BW_RATE,0b00001101);
-    usleep(2000);
+    usleep(20000);
 
     //Set FIFO to Bypass
     i2c_write(ADXL375_FIFO_CTL, 0b00000000);
-    usleep(2000);
+    usleep(20000);
+
+    //Set Data Format
+    i2c_write(ADXL375_DATA_FORMAT, 0b00001011);
+    usleep(20000);
 
     //Set into measure mode
     i2c_write(ADXL375_POWER_CTL, 0b00001000);
@@ -421,7 +439,10 @@ void read_axis(int device_addr, int dev)
 		accel1_data.z = z_raw/20.5;
 
 		accel1_data.stamp = micros()-global_start;
+
+		accel1_mtx.lock();
 		accel1_dataqueue.push(accel1_data);
+		accel1_mtx.unlock();
     	}
     	if (dev == 2) {
 		adxl375_rosinterface::adxl accel2_data;
@@ -433,7 +454,10 @@ void read_axis(int device_addr, int dev)
 		accel2_data.z = z_raw/20.5;
 
 		accel2_data.stamp = micros()-global_start;
+
+		accel2_mtx.lock();
 		accel2_dataqueue.push(accel2_data);
+		accel2_mtx.unlock();
 
 		//-------------------------------------------
 		adxl375_rosinterface::Accel alldata;
@@ -444,23 +468,23 @@ void read_axis(int device_addr, int dev)
 		alldata.y_raw = y_raw;
 		alldata.z_raw = z_raw;
 	
-		//bitset<8> byte0(a[0]);
-		//bitset<8> byte1(a[1]);
-		//bitset<8> byte2(a[2]);
-		//bitset<8> byte3(a[3]);
-		//bitset<8> byte4(a[4]);
-		//bitset<8> byte5(a[5]);
+		bitset<8> byte0(a[0]);
+		bitset<8> byte1(a[1]);
+		bitset<8> byte2(a[2]);
+		bitset<8> byte3(a[3]);
+		bitset<8> byte4(a[4]);
+		bitset<8> byte5(a[5]);
 
-		alldata.byte0 = "fuck"; //byte0.to_string();
-		alldata.byte1 = "this"; //byte1.to_string();
-		alldata.byte2 = "fucking"; //byte2.to_string();
-		alldata.byte3 = "shitty"; //byte3.to_string();
-		alldata.byte4 = "bull"; //byte4.to_string();
-		alldata.byte5 = "shit"; //byte5.to_string();
+		alldata.byte0 = byte0.to_string();
+		alldata.byte1 = byte1.to_string();
+		alldata.byte2 = byte2.to_string();
+		alldata.byte3 = byte3.to_string();
+		alldata.byte4 = byte4.to_string();
+		alldata.byte5 = byte5.to_string();
 
+		alldata_mtx.lock();
 		alldata_accel2_dataqueue.push(alldata);
-		printf("pushed \n");
-		//cout << alldata << "\n";
+		alldata_mtx.unlock();
     	}
 return;
 }
@@ -552,72 +576,44 @@ void csv_updater_lean()
 	//metadata
 	outputFile << metadata_string << "," << time_since_start << ",";
 
-	//Queue read and pop
+	//Queue read
 	static xsens_mti_driver::xsens_imu xsens_data;
-	if (xsens_dataqueue.size() > 1)
-	{
-	       	xsens_data = xsens_dataqueue.front();
-		xsens_dataqueue.pop();
-	}
+	if (!xsens_dataqueue.empty())
+		xsens_data = xsens_dataqueue.front();
+
 	static adxl375_rosinterface::adxl accel1_data;
-	if (accel1_dataqueue.size() > 1)
-	{
+	if (!accel1_dataqueue.empty())
 		accel1_data = accel1_dataqueue.front();
-		accel1_dataqueue.pop();
-	}
 
 	static adxl375_rosinterface::adxl accel2_data;
-	if (accel2_dataqueue.size() > 1)
-	{
+	if (!accel2_dataqueue.empty())
 		accel2_data = accel2_dataqueue.front();
-		accel2_dataqueue.pop();
-	}
-
+	
 	static geometry_msgs::TransformStamped vicon_data;
-	if (vicon_dataqueue.size() > 1)
-	{
+	if (!vicon_dataqueue.empty())
 		vicon_data  = vicon_dataqueue.front();
-		vicon_dataqueue.pop();
-	}
 
-	serial_interface::Razorimu seye_data;
-	if (seye_dataqueue.size() > 1)
-	{
+	static serial_interface::Razorimu seye_data;
+	if (!seye_dataqueue.empty())
 		seye_data = seye_dataqueue.front();
-		seye_dataqueue.pop();
-	}
 
 	static sensor_msgs::Imu djiimu_data;
-	if (djiimu_dataqueue.size() > 1)
-	{
+	if (!djiimu_dataqueue.empty())
 		djiimu_data = djiimu_dataqueue.front();
-		djiimu_dataqueue.pop();
-	}
 
-	printf("rc \n");
 	static sensor_msgs::Joy djirc_data;
 	if (start_flag == 1)
 	{
 		djirc_data.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
 		start_flag = 2;
 	}
-	if (djirc_dataqueue.size() > 1)
-	{
+	if (!djirc_dataqueue.empty())
 		djirc_data = djirc_dataqueue.front();
-		djirc_dataqueue.pop();
-	}
 
 	static adxl375_rosinterface::Accel alldata;
-	if (alldata_accel2_dataqueue.size() > 2)
-	{
-		int size = alldata_accel2_dataqueue.size();
-		printf("size = %d \n", size);
-		alldata = *alldata_accel2_dataqueue.front();
-		alldata_accel2_dataqueue.pop();
-		int post_size = alldata_accel2_dataqueue.size();
-		printf("postsize = %d \n", post_size);
-	}
-	printf("printing \n");
+	if (!alldata_accel2_dataqueue.empty())
+		alldata = alldata_accel2_dataqueue.front();
+	
 	//vicon
 	outputFile << vicon_data.header.seq << "," << vicon_data.header.stamp.sec << "," << vicon_data.header.stamp.nsec << "," << vicon_data.transform.translation.x << "," << vicon_data.transform.translation.y << "," << vicon_data.transform.translation.z << "," << vicon_data.transform.rotation.x << "," << vicon_data.transform.rotation.y << "," << vicon_data.transform.rotation.z << "," << vicon_data.transform.rotation.w << ","; 
 
@@ -632,9 +628,66 @@ void csv_updater_lean()
 
 	//Alldata
 	outputFile << alldata.x << "," << alldata.y << "," << alldata.z << "," << alldata.x_raw << "," << alldata.y_raw << "," << alldata.z_raw << "," << alldata.byte0 << "," << alldata.byte1 << "," << alldata.byte2 << "," << alldata.byte3 << "," << alldata.byte4 << "," << alldata.byte5 << ",";
-	printf("printing dji \n");
+	
 	//dji
 	outputFile << djiimu_data.header.seq << "," << djiimu_data.header.stamp.sec << "," << djiimu_data.header.stamp.nsec << "," << djiimu_data.orientation.x << "," << djiimu_data.orientation.y << "," << djiimu_data.orientation.z << "," << djiimu_data.orientation.w << "," << djiimu_data.angular_velocity.x << ","  << djiimu_data.angular_velocity.y << ","  << djiimu_data.angular_velocity.z << "," << djiimu_data.linear_acceleration.x << "," << djiimu_data.linear_acceleration.y << "," << djiimu_data.linear_acceleration.z << "," << djirc_data.header.seq << "," << djirc_data.header.stamp.sec << "," << djirc_data.header.stamp.nsec << "," << djirc_data.axes[0] << "," << djirc_data.axes[1] << "," << djirc_data.axes[2] << "," << djirc_data.axes[3] << "\n";
+
+	//Queue pop
+	if (xsens_dataqueue.size() > 1)
+	{
+		xsens_mtx.lock();
+		xsens_dataqueue.pop();
+		xsens_mtx.unlock();
+	}
+	
+	if (accel1_dataqueue.size() > 1)
+	{
+		accel1_mtx.lock();
+		accel1_dataqueue.pop();
+		accel1_mtx.unlock();
+	}
+
+	if (accel2_dataqueue.size() > 1)
+	{
+		accel2_mtx.lock();
+		accel2_dataqueue.pop();
+		accel2_mtx.unlock();
+	}
+
+	if (vicon_dataqueue.size() > 1)
+	{
+		vicon_mtx.lock();
+		vicon_dataqueue.pop();
+		vicon_mtx.unlock();
+	}
+
+	if (seye_dataqueue.size() > 1)
+	{
+		seye_mtx.lock();
+		seye_dataqueue.pop();
+		seye_mtx.unlock();
+	}
+
+	if (djiimu_dataqueue.size() > 1)
+	{
+		djiimu_mtx.lock();
+		djiimu_dataqueue.pop();
+		djiimu_mtx.unlock();
+	}
+
+	if (djirc_dataqueue.size() > 1)
+	{
+		djirc_mtx.lock();
+		djirc_dataqueue.pop();
+		djirc_mtx.unlock();
+	}
+	
+	if (alldata_accel2_dataqueue.size() > 1)
+	{
+		alldata_mtx.lock();
+		alldata_accel2_dataqueue.pop();
+		alldata_mtx.unlock();
+	}
 
 return;
 }
@@ -644,26 +697,33 @@ return;
 
 void viconCallback(geometry_msgs::TransformStamped msg)
 {
+	vicon_mtx.lock();
 	vicon_dataqueue.push(msg);
+	vicon_mtx.unlock();
 return;
 }
 
 void seyeCallback(serial_interface::Razorimu msg)
 {
+	seye_mtx.lock();
 	seye_dataqueue.push(msg);
+	seye_mtx.unlock();
 return;
 }
 
 void djiimuCallback(sensor_msgs::Imu msg)
 {
+	djiimu_mtx.lock();
 	djiimu_dataqueue.push(msg);
+	djiimu_mtx.unlock();
 return;
 }
 
 void djircCallback(sensor_msgs::Joy msg)
 {
-	//msg.axes = {0,0,0,0,0,0,0,0,0,0,0,0};
+	djirc_mtx.lock();
 	djirc_dataqueue.push(msg);
+	djirc_mtx.unlock();
 return;
 }
 
