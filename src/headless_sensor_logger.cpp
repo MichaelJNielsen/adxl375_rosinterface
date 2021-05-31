@@ -41,13 +41,13 @@ mutex xsens_mtx;
 mutex accel1_mtx;
 mutex accel2_mtx;
 mutex seye_mtx;
-mutex vicon_mtx;
 mutex djiimu_mtx;
 mutex djirc_mtx;
 
 //--------------------------------- Global Variables ---------------------------------------------------------------
 int csv_file;
 std::string dotfile;
+string file;
 ofstream outputFile;
 
 //Device address
@@ -77,7 +77,6 @@ XsPortInfo mtPort;
 queue<adxl375_rosinterface::adxl>accel1_dataqueue;
 queue<adxl375_rosinterface::adxl>accel2_dataqueue;
 queue<xsens_mti_driver::xsens_imu>xsens_dataqueue;
-queue<geometry_msgs::TransformStamped> vicon_dataqueue;
 queue<serial_interface::Razorimu> seye_dataqueue;
 queue<sensor_msgs::Imu> djiimu_dataqueue;
 queue<sensor_msgs::Joy> djirc_dataqueue;
@@ -172,7 +171,7 @@ CallbackHandler callback;
 
 void xsens_setup()
 {
-	cout << "Creating XsControl object..." << endl;
+	//cout << "Creating XsControl object..." << endl;
 	//XsControl* control = XsControl::construct(); //Made this global...
 	control = XsControl::construct();
 
@@ -182,13 +181,13 @@ void xsens_setup()
 	auto handleError = [=](string errorString)
 	{
 		control->destruct();
-		cout << errorString << endl;
-		cout << "Press [ENTER] to continue." << endl;
-		cin.get();
+		//cout << errorString << endl;
+		//cout << "Press [ENTER] to continue." << endl;
+		//cin.get();
 		exit(0);
 	};
 
-	cout << "Scanning for devices..." << endl;
+	//cout << "Scanning for devices..." << endl;
 	XsPortInfoArray portInfoArray = XsScanner::scanPorts();
 	//XsPortInfo mtPort; //Made this global...
 	// Find an MTi device
@@ -202,14 +201,14 @@ void xsens_setup()
 	}
 	if (mtPort.empty())
 	{
-		printf("No MTi device found. Aborting.");
+		//printf("No MTi device found. Aborting.");
 		exit(0);
 	}
-	cout << "Found a device with ID: " << mtPort.deviceId().toString().toStdString() << " @ port: " << mtPort.portName().toStdString() << ", baudrate: " << mtPort.baudrate() << endl;
-	cout << "Opening port..." << endl;
+	//cout << "Found a device with ID: " << mtPort.deviceId().toString().toStdString() << " @ port: " << mtPort.portName().toStdString() << ", baudrate: " << mtPort.baudrate() << endl;
+	//cout << "Opening port..." << endl;
 	if (!control->openPort(mtPort.portName().toStdString(), mtPort.baudrate()))
 	{
-		printf("Could not open port. Aborting.");
+		//printf("Could not open port. Aborting.");
 		exit(0);
 	}
 	// Get the device object
@@ -218,45 +217,45 @@ void xsens_setup()
 
 	assert(device != 0);
 
-	cout << "Device: " << device->productCode().toStdString() << ", with ID: " << device->deviceId().toString() << " opened." << endl;
+	//cout << "Device: " << device->productCode().toStdString() << ", with ID: " << device->deviceId().toString() << " opened." << endl;
 		
 	// Create and attach callback handler to device
 	//CallbackHandler callback;	//Made this global...
 	device->addCallbackHandler(&callback);
 
-	cout << "Putting device into measurement mode..." << endl;
+	//cout << "Putting device into measurement mode..." << endl;
 	if (!device->gotoMeasurement())
 	{
-		printf("Could not put device into measurement mode. Aborting.");
+		//printf("Could not put device into measurement mode. Aborting.");
 		exit(0);
 	}
 
-	cout << "Starting recording..." << endl;
+	//cout << "Starting recording..." << endl;
 	if (!device->startRecording())
 	{
-		printf("Failed to start recording. Aborting.");
+		//printf("Failed to start recording. Aborting.");
 		exit(0);
 	}
 	usleep(100000);
-	printf("Xsens ready to record \n");
+	//printf("Xsens ready to record \n");
 return;
 }
 
 void xsens_closer()
 {
-	printf("Xsens - stopping recording... \n");
+	//printf("Xsens - stopping recording... \n");
 	if (!device->stopRecording()) {
-		printf("Failed to stop recording \n");
+		//printf("Failed to stop recording \n");
 		exit(0);
 	}
 
-	printf("Xsens - closing port... \n");
+	//printf("Xsens - closing port... \n");
 	control->closePort(mtPort.portName().toStdString());
 
-	printf("Freeing XsControl object... \n");
+	//printf("Freeing XsControl object... \n");
 	control->destruct();
 
-	printf("Xsens succesfully closed \n");
+	//printf("Xsens succesfully closed \n");
 return;
 }
 
@@ -295,7 +294,7 @@ void xsens_read()
 					xsens_mtx.unlock();
 				}
 				else {
-					printf("Packet does not contain raw data \n");
+					//printf("Packet does not contain raw data \n");
 					exit(0);
 				}
 			i++;
@@ -315,7 +314,7 @@ void open_bus() {
     file_i2c = open(filename, O_RDWR); //Open the i2c bus as both read and write.
     if (file_i2c < 0)
     {
-        printf("Failed to open the specified i2c bus \n");
+        //printf("Failed to open the specified i2c bus \n");
         exit(0);
     }
     usleep(20000);
@@ -323,11 +322,11 @@ return;
 }
 
 void close_bus() {
-	printf("Closing i2c bus \n");
+	//printf("Closing i2c bus \n");
 	int closer = close(file_i2c);
-	if (close < 0)
+	if (closer < 0)
 	{
-		printf("Failed to close the specified i2c bus \n");
+		//printf("Failed to close the specified i2c bus \n");
 		exit(0);
 	}
 return;
@@ -336,7 +335,7 @@ return;
 void connect_device(int device_addr) {
     if (ioctl(file_i2c, I2C_SLAVE, device_addr) < 0)
     {
-	    printf("Failed to acquire bus access and/or talk to slave.\n");
+	    //printf("Failed to acquire bus access and/or talk to slave.\n");
 	    //ERROR HANDLING; you can check errno to see what went wrong
 	    exit(0);
     }
@@ -350,11 +349,11 @@ void i2c_write(unsigned char bytes0, unsigned char bytes1) {
     ssize_t w { write(file_i2c, outbuffer, sizeof(outbuffer))};
     w = write(file_i2c, outbuffer, sizeof(outbuffer));
     if (w!=sizeof(outbuffer)) {
-        std::cout << "Could not write full array" << std::endl;
+        //std::cout << "Could not write full array" << std::endl;
         exit(0);
     }
     if (w<0) {
-        std::cout << "Write error" << std::endl;
+        //std::cout << "Write error" << std::endl;
         exit(0);
     }
 return;
@@ -405,7 +404,7 @@ void adxl_standby(int device_addr)
     i2c_write(ADXL375_POWER_CTL, 0b00000000);
     usleep(20000);
 
-    printf("Device set to standby mode \n");
+    //printf("Device set to standby mode \n");
 return;
 }
 
@@ -420,13 +419,13 @@ void read_axis(int device_addr, int dev)
     	//Read what it sends
     	ssize_t const r { read(file_i2c, a, sizeof(a))};
     	if (r!=sizeof(a)) {
-        	std::cout << "Could not read full array" << std::endl;
-        	printf("r = %ld", r);
-        	printf("\n");
+        	//std::cout << "Could not read full array" << std::endl;
+        	//printf("r = %ld", r);
+        	//printf("\n");
         	exit(0);
     	}
     	if (r<0) {
-        	std::cout << "Read error" << std::endl;
+        	//std::cout << "Read error" << std::endl;
         	exit(0);
     	}	
 
@@ -481,35 +480,37 @@ return;
 
 
 //------------------------------ Write to CSV functions ---------------------------------------------------------
-
-void setup_csv_lean()
+void setup_csv_headless()
 {
-	string file;
-    	char input;
+	//time_t now = time(nullptr);
+	//file = to_string(now);
+	//file = file + ".csv";
 
-    	printf("Input desired file name \n");
-    	getline(cin, file);
-    	dotfile = file + ".csv";
+	file = "test";
+	int num = 1;
+	int namer_flag = 0;
+	string name;
 
-	ifstream ifile(dotfile);
-	if (ifile) {
-		printf("File already exists. Overwrite? [y/n] \n");
-		cin >> input;
-		if (input == 'y' || input == 'Y') {
-            		printf("Overwriting %s \n", dotfile.c_str());
+	while (namer_flag == 0)
+	{
+		name = file + to_string(num) + ".csv";
+		dotfile = "/root/Desktop/catkin_ws/" + name;
+		ifstream ifile(dotfile);
+		if (ifile){
+			//file already exists
+			num = num + 1;
 		}
 		else {
-	    	printf("Exiting, please try a different file name. \n");
-	    	exit(0);
+			namer_flag = 1;
 		}
 	}
-	outputFile.open(dotfile);
-    	printf("csv file opened \n");
 
-    	string header_string, metadata, vicon, SafeEye, xsens, adxl1, adxl2, DJI;
+	outputFile.open(dotfile);
+    	//printf("csv file opened \n");
+
+    	string header_string, metadata, SafeEye, xsens, adxl1, adxl2, DJI;
 
     	metadata = "name, time_since_start";
-    	vicon =  "vicon_sequence, vicon_time_stamp_sec, vicon_time_stamp_nsec, vicon_translation_x, vicon_translation_y, vicon_translation_z, vicon_rotation_x, vicon_rotation_y, vicon_rotation_z, vicon_rotation_w";
     	SafeEye = "seye_razor_time_stamp, seye_razor_acc_x, seye_razor_acc_y, seye_razor_acc_z, seye_razor_gyro_x, seye_razor_gyro_y, seye_razor_gyro_z, seye_razor_mag_x, seye_razor_mag_y, seye_razor_mag_z";
     	xsens = "xsens_time_stamp, xsens_acc_x,  xsens_acc_y, xsens_acc_z, xsens_gyro_x, xsens_gyro_y, xsens_gyro_z, xsens_mag_x, xsens_mag_y, xsens_mag_z";
 
@@ -519,11 +520,10 @@ void setup_csv_lean()
 
 	DJI = "dji_imu_sequence, dji_imu_time_stamp_sec, dji_imu_time_stamp_nsec, dji_imu_orientation_x, dji_imu_orientation_y, dji_imu_orientation_z, dji_imu_orientation_w, dji_imu_ang_vel_x, dji_imu_ang_vel_y, dji_imu_ang_vel_z, dji_imu_acc_x, dji_imu_acc_y, dji_imu_acc_z, rc_sequence, rc_time_stamp_sec, rc_time_stamp_nsec, rc_roll, rc_pitch, rc_yaw, rc_throttle";
 
-    	header_string = metadata + "," + vicon + "," + SafeEye + "," + xsens + "," + adxl1 + "," + adxl2 + "," + DJI + "\n";
+    	header_string = metadata + "," + SafeEye + "," + xsens + "," + adxl1 + "," + adxl2 + "," + DJI + "\n";
 
-	printf("Writing header \n");
+	//printf("Writing header \n");
 	outputFile << header_string;
-return;
 }
 
 void csv_updater_lean()
@@ -534,8 +534,8 @@ void csv_updater_lean()
 
 	//Metadata
 	if (start_flag == 0) {
-		printf("start = %d \n", start);
-		metadata_string = dotfile;
+		//printf("start = %d \n", start);
+		metadata_string = file;
 		start_flag = 1;
 	}
 	else {
@@ -555,10 +555,6 @@ void csv_updater_lean()
 	if (!accel2_dataqueue.empty())
 		accel2_data = accel2_dataqueue.front();
 	
-	static geometry_msgs::TransformStamped vicon_data;
-	if (!vicon_dataqueue.empty())
-		vicon_data  = vicon_dataqueue.front();
-
 	static serial_interface::Razorimu seye_data;
 	if (!seye_dataqueue.empty())
 		seye_data = seye_dataqueue.front();
@@ -581,9 +577,6 @@ void csv_updater_lean()
 	auto time_since_start = micros()-global_start;
 	outputFile << metadata_string << "," << time_since_start << ",";
 	
-	//vicon
-	outputFile << vicon_data.header.seq << "," << vicon_data.header.stamp.sec << "," << vicon_data.header.stamp.nsec << "," << vicon_data.transform.translation.x << "," << vicon_data.transform.translation.y << "," << vicon_data.transform.translation.z << "," << vicon_data.transform.rotation.x << "," << vicon_data.transform.rotation.y << "," << vicon_data.transform.rotation.z << "," << vicon_data.transform.rotation.w << ","; 
-
 	//seye
 	outputFile << seye_data.time_stamp << "," << seye_data.acc_x << "," << seye_data.acc_y << "," << seye_data.acc_z << "," << seye_data.gyro_x << "," << seye_data.gyro_y << "," << seye_data.gyro_z << "," << seye_data.mag_x << "," << seye_data.mag_y << "," << seye_data.mag_z << ",";
 
@@ -624,13 +617,6 @@ void csv_updater_lean()
 		accel2_mtx.unlock();
 	}
 
-	if (vicon_dataqueue.size() > 1)
-	{
-		vicon_mtx.lock();
-		vicon_dataqueue.pop();
-		vicon_mtx.unlock();
-	}
-
 	if (seye_dataqueue.size() > 1)
 	{
 		seye_mtx.lock();
@@ -656,14 +642,6 @@ return;
 
 
 //------------------------------------Callback functions--------------------------------
-
-void viconCallback(geometry_msgs::TransformStamped msg)
-{
-	vicon_mtx.lock();
-	vicon_dataqueue.push(msg);
-	vicon_mtx.unlock();
-return;
-}
 
 void seyeCallback(serial_interface::Razorimu msg)
 {
@@ -720,7 +698,6 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "sensorlogger");
   	ros::NodeHandle n;
-	ros::Subscriber sub1 = n.subscribe("/vicon/test_obj/test_obj", 1, viconCallback);
 	ros::Subscriber sub2 = n.subscribe("/Razor_IMU/SafeEye", 1, seyeCallback);
 	ros::Subscriber sub3 = n.subscribe("/dji_sdk/imu", 1, djiimuCallback);
 	ros::Subscriber sub4 = n.subscribe("/dji_sdk/rc", 1, djircCallback);
@@ -736,7 +713,7 @@ int main(int argc, char **argv)
 	xsens_setup();
 
 	//Setup csv header
- 	setup_csv_lean();
+ 	setup_csv_headless();
 
 	thread t2(ros_spinner);
 	usleep(1000);
@@ -745,9 +722,9 @@ int main(int argc, char **argv)
 
 	thread t1(read_two_axes);
 	thread t3(xsens_read);
-	thread t4(status_printer);
+	//thread t4(status_printer);
 
-	printf("Ready \n");
+	//printf("Ready \n");
 
 	while (ros::ok())
   	{
@@ -759,7 +736,7 @@ int main(int argc, char **argv)
         	time_thread.join();
   	}
 
-	printf("Interrupted! \n");
+	//printf("Interrupted! \n");
 	sleep(1);
 
 	adxl_standby(ADXL375_DEVICE1);

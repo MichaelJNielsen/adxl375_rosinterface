@@ -233,6 +233,17 @@ target_link_libraries(
 	${catkin_LIBRARIES})
 add_dependencies(sensor_logger adxl375_rosinterface_generate_messages_cpp)
 
+add_executable(headless_sensor_logger src/headless_sensor_logger.cpp)
+target_link_libraries(
+	headless_sensor_logger
+	xscontroller
+	xscommon
+	xstypes
+	pthread
+	dl	
+	${catkin_LIBRARIES})
+add_dependencies(headless_sensor_logger adxl375_rosinterface_generate_messages_cpp)
+
 add_executable(adxl_xsens_logger src/adxl_xsens_logger.cpp)
 target_link_libraries(
 	adxl_xsens_logger
